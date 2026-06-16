@@ -1,0 +1,25 @@
+# Streamlit App Configuration
+app:
+  title: "ISRO BAH 2026: Cloud Removal Platform"
+  version: "1.0.0"
+  team_name: "Team Antriksh"
+  
+theme:
+  primaryColor: "#FF6B35" # Space Orange
+  backgroundColor: "#0F111A"
+  secondaryBackgroundColor: "#1E2233"
+  textColor: "#FFFFFF"
+  font: "sans serif"
+  isro_blue: "#003087"
+
+paths:
+  sample_data_dir: "data/sample/"
+  logo_path: "app/assets/isro_logo.png"
+  results_dir: "results/"
+  
+models:
+  available:
+    - "Baseline (OpenCV)"
+    - "LaMa Inpainting"
+    - "SAR-Fusion U-Net"
+  default: "SAR-Fusion U-Net"

@@ -1,0 +1,59 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environment Variables
+.env
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data and Models
+data/raw/
+data/processed/
+data/cloud_masks/
+!data/sample/
+models/*/weights/*.pth
+models/*/weights/*.onnx
+!models/*/weights/.gitkeep
+
+# Results
+results/
+logs/
+
+# Streamlit / Frontend Modules
+.streamlit/
+app/

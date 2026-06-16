@@ -1,0 +1,28 @@
+# SAR-Fusion Dual-Encoder U-Net Configuration
+model:
+  name: "SAR_Fusion_UNet"
+  optical_channels: 4 # RGB + Mask (LISS-IV)
+  sar_channels: 2     # VV + VH (Sentinel-1)
+  out_channels: 3     # Reconstructed RGB
+  
+  architecture:
+    base_filters: 64
+    attention_heads: 4
+    dropout_rate: 0.2
+
+training:
+  batch_size: 4
+  epochs: 50
+  learning_rate: 0.0001
+  weight_decay: 0.00001
+  
+  losses:
+    l1_weight: 10.0
+    perceptual_weight: 1.0
+    sam_weight: 2.0  # Spectral Angle Mapper loss for NIR fidelity
+
+inference:
+  use_onnx: true
+  onnx_path: "models/sar_fusion/weights/sar_fusion.onnx"
+  pytorch_path: "models/sar_fusion/weights/sar_fusion.pth"
+  batch_size: 1

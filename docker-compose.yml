@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./models/lama/weights:/app/models/lama/weights
+      - ./models/sar_fusion/weights:/app/models/sar_fusion/weights
+      - ./results:/app/results
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
