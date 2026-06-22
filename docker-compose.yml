@@ -10,6 +10,9 @@ services:
       - ./models/lama/weights:/app/models/lama/weights
       - ./models/sar_fusion/weights:/app/models/sar_fusion/weights
       - ./results:/app/results
+      - ./app:/app/app
+      - ./pipeline:/app/pipeline
+      - ./evaluation:/app/evaluation
     env_file:
       - .env
     environment:

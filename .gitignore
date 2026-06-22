@@ -46,6 +46,7 @@ data/raw/
 data/processed/
 data/cloud_masks/
 !data/sample/
+datasets/
 models/*/weights/*.pth
 models/*/weights/*.onnx
 !models/*/weights/.gitkeep
@@ -56,4 +57,6 @@ logs/
 
 # Streamlit / Frontend Modules
 .streamlit/
-app/
+
+# Large Output Images
+gallery/

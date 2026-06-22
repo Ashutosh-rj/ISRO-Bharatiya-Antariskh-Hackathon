@@ -26,8 +26,8 @@ WORKDIR /app
 
 # Install runtime system dependencies
 RUN apt-get update && apt-get install -y \
-    libgdal30 \
-    libgl1-mesa-glx \
+    gdal-bin \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /app/wheels /wheels
 COPY --from=builder /app/requirements.txt .
 
-RUN pip install --no-cache /wheels/*
+RUN pip install --no-cache-dir --find-links=/wheels -r requirements.txt
 
 # Copy application code
 COPY . .

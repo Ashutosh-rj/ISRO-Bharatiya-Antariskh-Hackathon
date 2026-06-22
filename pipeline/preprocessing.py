@@ -38,17 +38,28 @@ class PatchExtractor:
         return patches
 
 class DataAugmentor:
-    def __init__(self):
+    def __init__(self, crop_size=256):
+        self.crop_size = crop_size
         self.transform = A.Compose([
+            A.RandomCrop(width=crop_size, height=crop_size, p=1.0),
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.RandomRotate90(p=0.5),
-            A.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.0, p=0.3)
-        ])
+            A.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.0, p=0.3),
+            A.GaussNoise(var_limit=(10.0, 50.0), p=0.2), # Atmospheric noise simulation
+            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.3) # Cloud opacity variance
+        ], additional_targets={'mask': 'mask', 'cloud_free': 'image', 'sar': 'image'})
 
-    def augment(self, image: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        augmented = self.transform(image=image, mask=mask)
-        return augmented['image'], augmented['mask']
+    def augment(self, cloudy: np.ndarray, mask: np.ndarray, cloud_free: np.ndarray = None, sar: np.ndarray = None) -> Dict[str, np.ndarray]:
+        # Handle dictionary-based augmentation for multiple modalities
+        targets = {'image': cloudy, 'mask': mask}
+        if cloud_free is not None:
+            targets['cloud_free'] = cloud_free
+        if sar is not None:
+            targets['sar'] = sar
+            
+        augmented = self.transform(**targets)
+        return augmented
 
 class LISSIV_Dataset(Dataset):
     """
@@ -72,8 +83,11 @@ class LISSIV_Dataset(Dataset):
         sar = data.get('sar', np.zeros((cloudy.shape[0], cloudy.shape[1], 2), dtype=cloudy.dtype))
         
         if self.augmentor:
-            cloudy, mask = self.augmentor.augment(cloudy, mask)
-            # Would need more complex augmentation to handle all modalities synchronously
+            augmented = self.augmentor.augment(cloudy=cloudy, mask=mask, cloud_free=cloud_free, sar=sar)
+            cloudy = augmented['image']
+            mask = augmented['mask']
+            cloud_free = augmented['cloud_free']
+            sar = augmented['sar']
             
         # Convert to float32 tensors, channel first [C, H, W]
         cloudy_t = torch.from_numpy(cloudy).float().permute(2, 0, 1) / 255.0

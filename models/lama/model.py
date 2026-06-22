@@ -74,6 +74,18 @@ class SpectralTransform(nn.Module):
         # Combine
         return torch.cat([x1, x2], dim=1)
 
+class ResidualFFCBlock(nn.Module):
+    """
+    Residual Fast Fourier Convolution block - the core of LaMa.
+    Adds a skip connection around the SpectralTransform.
+    """
+    def __init__(self, channels):
+        super(ResidualFFCBlock, self).__init__()
+        self.ffc = SpectralTransform(channels, channels)
+
+    def forward(self, x):
+        return x + self.ffc(x)
+
 class LaMaGenerator(nn.Module):
     """
     Large Mask Inpainting Generator using Fast Fourier Convolutions.
@@ -105,7 +117,7 @@ class LaMaGenerator(nn.Module):
         # FFC Residual Blocks (Bottleneck)
         blocks = []
         for _ in range(n_blocks):
-            blocks.append(SpectralTransform(ngf * 4, ngf * 4))
+            blocks.append(ResidualFFCBlock(ngf * 4))
         self.ffc_blocks = nn.Sequential(*blocks)
         
         # Upsampling

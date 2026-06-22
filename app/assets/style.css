@@ -1,0 +1,48 @@
+/* ISRO Theme CSS */
+:root {
+    --isro-blue: #003087;
+    --space-orange: #FF6B35;
+    --dark-bg: #0F111A;
+    --panel-bg: #1E2233;
+}
+
+.stApp {
+    background-color: var(--dark-bg);
+    color: white;
+}
+
+[data-testid="stSidebar"] {
+    background-color: var(--panel-bg);
+}
+
+.stButton>button {
+    background-color: var(--space-orange);
+    color: white;
+    border-radius: 4px;
+    border: none;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.stButton>button:hover {
+    background-color: #e55c2b;
+    border-color: var(--space-orange);
+    color: white;
+}
+
+h1, h2, h3 {
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Metric Cards */
+[data-testid="stMetricValue"] {
+    color: var(--space-orange);
+}
+
+/* Info Boxes */
+.stAlert {
+    background-color: rgba(0, 48, 135, 0.2);
+    border-left: 4px solid var(--isro-blue);
+    color: white;
+}

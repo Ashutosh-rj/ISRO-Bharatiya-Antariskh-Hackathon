@@ -3,7 +3,12 @@ import torch
 import numpy as np
 import logging
 import yaml
-import onnxruntime as ort
+try:
+    import onnxruntime as ort
+    ORT_AVAILABLE = True
+except ImportError as e:
+    ort = None
+    ORT_AVAILABLE = False
 from models.lama.model import LaMaGenerator
 
 logger = logging.getLogger(__name__)
@@ -19,6 +24,10 @@ class LaMaInference:
             
         self.use_onnx = self.config['inference']['use_onnx']
         
+        if self.use_onnx and not ORT_AVAILABLE:
+            logger.warning("ONNX Runtime is not available in this environment. Falling back to PyTorch.")
+            self.use_onnx = False
+            
         if self.use_onnx:
             onnx_path = self.config['inference']['onnx_path']
             if not os.path.exists(onnx_path):

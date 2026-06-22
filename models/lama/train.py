@@ -1,13 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 import logging
 import os
 import yaml
 from models.lama.model import LaMaGenerator
 from pipeline.preprocessing import LISSIV_Dataset
-# from evaluation.metrics import compute_lpips # Could be used in loss
+from models.losses import CombinedLoss
 
 logger = logging.getLogger(__name__)
 
@@ -29,48 +29,71 @@ class LaMaTrainer:
             lr=self.config['training']['learning_rate'],
             weight_decay=self.config['training']['weight_decay']
         )
+        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.config['training']['epochs'])
         
-        self.l1_loss = nn.L1Loss()
-        # Perceptual and FFT loss stubs (in a full impl, load VGG features here)
+        self.loss_fn = CombinedLoss(
+            l1_weight=self.config['training']['losses'].get('l1_weight', 10.0),
+            sam_weight=self.config['training']['losses'].get('sam_weight', 0.0), # LaMa doesn't typically use SAM but we could
+            perceptual_weight=self.config['training']['losses'].get('perceptual_weight', 1.0),
+            device=self.device
+        )
         
         self.weights_dir = "models/lama/weights"
         os.makedirs(self.weights_dir, exist_ok=True)
 
     def train(self, npz_paths: list):
         dataset = LISSIV_Dataset(npz_paths, augment=True)
-        dataloader = DataLoader(dataset, batch_size=self.config['training']['batch_size'], shuffle=True)
+        
+        # 80/20 train/val split
+        val_size = max(1, int(0.2 * len(dataset)))
+        train_size = len(dataset) - val_size
+        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+        
+        train_loader = DataLoader(train_dataset, batch_size=self.config['training']['batch_size'], shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=self.config['training']['batch_size'], shuffle=False)
         
         epochs = self.config['training']['epochs']
-        logger.info(f"Starting training for {epochs} epochs")
+        logger.info(f"Starting training for {epochs} epochs (Train: {train_size}, Val: {val_size})")
         
         for epoch in range(epochs):
             self.model.train()
             epoch_loss = 0.0
             
-            for batch_idx, batch in enumerate(dataloader):
+            for batch_idx, batch in enumerate(train_loader):
                 cloudy = batch['cloudy'].to(self.device)
                 mask = batch['mask'].to(self.device)
                 target = batch['cloud_free'].to(self.device)
                 
                 self.optimizer.zero_grad()
                 
-                # Forward pass
                 pred = self.model(cloudy, mask)
+                loss, metrics = self.loss_fn(pred, target, mask)
                 
-                # Compute loss
-                loss_l1 = self.l1_loss(pred * mask, target * mask) # Only penalize masked region
-                # loss_perceptual = compute_lpips(pred, target, self.device)
-                
-                loss = loss_l1 * self.config['training']['losses']['l1_weight']
-                
-                # Backward pass
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 self.optimizer.step()
                 
                 epoch_loss += loss.item()
                 
-            avg_loss = epoch_loss / len(dataloader)
-            logger.info(f"Epoch [{epoch+1}/{epochs}] Loss: {avg_loss:.4f}")
+            self.scheduler.step()
+            avg_train_loss = epoch_loss / len(train_loader)
+            
+            # Validation step
+            self.model.eval()
+            val_loss = 0.0
+            with torch.no_grad():
+                for batch in val_loader:
+                    cloudy = batch['cloudy'].to(self.device)
+                    mask = batch['mask'].to(self.device)
+                    target = batch['cloud_free'].to(self.device)
+                    
+                    pred = self.model(cloudy, mask)
+                    loss, _ = self.loss_fn(pred, target, mask)
+                    val_loss += loss.item()
+                    
+            avg_val_loss = val_loss / len(val_loader)
+            
+            logger.info(f"Epoch [{epoch+1}/{epochs}] Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | LR: {self.scheduler.get_last_lr()[0]:.6f}")
             
             if (epoch + 1) % 10 == 0:
                 self.save_checkpoint(f"lama_epoch_{epoch+1}.pth")

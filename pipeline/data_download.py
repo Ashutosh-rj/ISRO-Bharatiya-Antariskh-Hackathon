@@ -1,93 +1,137 @@
 import os
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict
 import requests
 from dotenv import load_dotenv
-
-# Optional import for Sentinel
-try:
-    from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
-except ImportError:
-    SentinelAPI = None
+import pystac_client
+import planetary_computer
+import rasterio
+from rasterio.windows import Window
+import numpy as np
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+class PlanetaryComputerDownloader:
+    """
+    Downloads Sentinel-1 (SAR) and Sentinel-2 (Optical) data via Microsoft Planetary Computer STAC API.
+    Does not require authentication for public datasets.
+    """
+    def __init__(self):
+        self.catalog = pystac_client.Client.open(
+            "https://planetarycomputer.microsoft.com/api/stac/v1",
+            modifier=planetary_computer.sign_inplace,
+        )
+        logger.info("Initialized Planetary Computer STAC Client.")
+
+    def search_sentinel2(self, bbox: List[float], start_date: str, end_date: str, max_cloud_cover: float = 30.0):
+        """Finds Sentinel-2 L2A items matching criteria."""
+        search = self.catalog.search(
+            collections=["sentinel-2-l2a"],
+            bbox=bbox,
+            datetime=f"{start_date}/{end_date}",
+            query={"eo:cloud_cover": {"lt": max_cloud_cover}},
+        )
+        items = list(search.items())
+        logger.info(f"Found {len(items)} Sentinel-2 items.")
+        return items
+
+    def search_sentinel1(self, bbox: List[float], start_date: str, end_date: str):
+        """Finds Sentinel-1 GRD items matching criteria."""
+        search = self.catalog.search(
+            collections=["sentinel-1-grd"],
+            bbox=bbox,
+            datetime=f"{start_date}/{end_date}",
+        )
+        items = list(search.items())
+        logger.info(f"Found {len(items)} Sentinel-1 items.")
+        return items
+
+    def download_s2_patch(self, item, bbox: List[float], output_dir: str):
+        """
+        Downloads a windowed patch of Sentinel-2 (B03=Green, B04=Red, B08=NIR) + SCL (Scene Classification).
+        """
+        os.makedirs(output_dir, exist_ok=True)
+        # Note: Planetary Computer provides COG, so we can do windowed reads easily.
+        # However, for a hackathon, let's just use requests to download the specific assets.
+        # Alternatively, using rasterio to read the exact bbox window.
+        
+        bands = ['B03', 'B04', 'B08', 'SCL']
+        patch_data = {}
+        
+        try:
+            for band in bands:
+                href = item.assets[band].href
+                with rasterio.open(href) as src:
+                    # In a full implementation, we'd calculate the exact window from bbox.
+                    # For simplicity, we just read the center 1024x1024.
+                    width, height = src.width, src.height
+                    w = 1024
+                    h = 1024
+                    window = Window(width // 2 - w // 2, height // 2 - h // 2, w, h)
+                    data = src.read(1, window=window)
+                    patch_data[band] = data
+            
+            # Stack Green, Red, NIR
+            rgbn = np.stack([patch_data['B03'], patch_data['B04'], patch_data['B08']], axis=-1)
+            # Normalize to 0-255 uint8 roughly for LISS-IV approximation
+            # Sentinel-2 data is roughly 0-10000 reflectance
+            rgbn_norm = np.clip((rgbn / 4000.0) * 255, 0, 255).astype(np.uint8)
+            
+            scl = patch_data['SCL'] # Scene classification map (clouds, shadows, etc.)
+            
+            np.savez_compressed(
+                os.path.join(output_dir, f"s2_{item.id}.npz"),
+                optical=rgbn_norm,
+                scl=scl
+            )
+            logger.info(f"Saved Sentinel-2 patch {item.id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error downloading S2 patch: {e}")
+            return False
+
+    def download_s1_patch(self, item, output_dir: str):
+        """Downloads a windowed patch of Sentinel-1 (VV, VH)."""
+        os.makedirs(output_dir, exist_ok=True)
+        bands = ['vv', 'vh']
+        patch_data = {}
+        
+        try:
+            for band in bands:
+                if band in item.assets:
+                    href = item.assets[band].href
+                    with rasterio.open(href) as src:
+                        w, h = 1024, 1024
+                        window = Window(src.width // 2 - w // 2, src.height // 2 - h // 2, w, h)
+                        data = src.read(1, window=window)
+                        patch_data[band] = data
+            
+            if 'vv' in patch_data and 'vh' in patch_data:
+                sar = np.stack([patch_data['vv'], patch_data['vh']], axis=-1)
+                
+                # Simple normalization for SAR backscatter to uint8 representation
+                sar_db = 10 * np.log10(np.clip(sar, 1e-5, None))
+                sar_norm = np.clip((sar_db + 25) / 30 * 255, 0, 255).astype(np.uint8)
+                
+                np.savez_compressed(
+                    os.path.join(output_dir, f"s1_{item.id}.npz"),
+                    sar=sar_norm
+                )
+                logger.info(f"Saved Sentinel-1 patch {item.id}")
+                return True
+        except Exception as e:
+            logger.error(f"Error downloading S1 patch: {e}")
+            return False
+
 class BhuvanDownloader:
     """
-    Downloads LISS-IV imagery from ISRO's Bhuvan portal via WMS/WCS APIs.
-    Requires BHUVAN_USERNAME and BHUVAN_PASSWORD in .env.
+    STUB: Bhuvan integration is pending actual API credentials and WCS access.
+    Fallback to LISS-IV sample imagery if available.
     """
     def __init__(self):
         self.username = os.getenv('BHUVAN_USERNAME')
-        self.password = os.getenv('BHUVAN_PASSWORD')
-        self.base_url = "https://bhuvan-vec1.nrsc.gov.in/bhuvan/ows"
-        
-        if not self.username:
-            logger.warning("Bhuvan credentials not found in environment. Downloads may fail.")
+        logger.warning("BhuvanDownloader is operating in STUB mode.")
 
-    def download_region(self, bbox: List[float], start_date: str, end_date: str, output_path: str):
-        """
-        Mock implementation for downloading LISS-IV data via WMS/WCS.
-        bbox: [min_lon, min_lat, max_lon, max_lat]
-        """
-        logger.info(f"Initiating Bhuvan download for bbox {bbox} from {start_date} to {end_date}.")
-        
-        # Real implementation would construct WCS GetCoverage requests here.
-        # e.g., using requests.get(url, params={...}, auth=(user, pass))
-        
-        # Mocking a successful download
-        logger.info(f"Downloaded LISS-IV GeoTIFF to {output_path}")
-        # open(output_path, 'wb').write(b'mock_geotiff_data')
-
-
-class SentinelDownloader:
-    """
-    Downloads Sentinel-1 (SAR) and Sentinel-2 (Optical) data via Copernicus API.
-    Requires COPERNICUS_USER and COPERNICUS_PASSWORD in .env.
-    """
-    def __init__(self):
-        self.user = os.getenv('COPERNICUS_USER')
-        self.password = os.getenv('COPERNICUS_PASSWORD')
-        
-        if not self.user or not SentinelAPI:
-            logger.warning("Copernicus credentials missing or sentinelsat not installed.")
-            self.api = None
-        else:
-            self.api = SentinelAPI(self.user, self.password, 'https://apihub.copernicus.eu/apihub')
-
-    def download_sar(self, footprint_wkt: str, start_date: str, end_date: str, output_dir: str):
-        """Downloads Sentinel-1 GRD (SAR) imagery for the specified footprint."""
-        if not self.api:
-            logger.error("SentinelAPI is not initialized.")
-            return
-            
-        logger.info(f"Querying Sentinel-1 data for {start_date} to {end_date}")
-        products = self.api.query(footprint_wkt,
-                                  date=(start_date, end_date),
-                                  platformname='Sentinel-1',
-                                  producttype='GRD')
-        
-        if products:
-            logger.info(f"Found {len(products)} products. Downloading...")
-            self.api.download_all(products, directory_path=output_dir)
-        else:
-            logger.warning("No Sentinel-1 products found for given criteria.")
-
-    def download_optical(self, footprint_wkt: str, start_date: str, end_date: str, output_dir: str):
-        """Downloads Sentinel-2 MSI (Optical) imagery for the specified footprint."""
-        if not self.api:
-            logger.error("SentinelAPI is not initialized.")
-            return
-            
-        logger.info(f"Querying Sentinel-2 data for {start_date} to {end_date}")
-        products = self.api.query(footprint_wkt,
-                                  date=(start_date, end_date),
-                                  platformname='Sentinel-2',
-                                  cloudcoverpercentage=(0, 30))
-        
-        if products:
-            logger.info(f"Found {len(products)} products. Downloading...")
-            self.api.download_all(products, directory_path=output_dir)
-        else:
-            logger.warning("No Sentinel-2 products found for given criteria.")
+    def download_region(self, *args, **kwargs):
+        logger.info("STUB: Simulating Bhuvan download.")

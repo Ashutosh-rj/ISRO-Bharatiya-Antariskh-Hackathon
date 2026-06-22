@@ -1,9 +1,9 @@
 # SAR-Fusion Dual-Encoder U-Net Configuration
 model:
   name: "SAR_Fusion_UNet"
-  optical_channels: 4 # RGB + Mask (LISS-IV)
+  optical_channels: 4 # G-R-NIR + Mask (LISS-IV)
   sar_channels: 2     # VV + VH (Sentinel-1)
-  out_channels: 3     # Reconstructed RGB
+  out_channels: 3     # Reconstructed G-R-NIR
   
   architecture:
     base_filters: 64

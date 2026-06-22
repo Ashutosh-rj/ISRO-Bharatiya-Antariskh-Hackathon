@@ -1,8 +1,8 @@
 # LaMa Model Configuration
 model:
   name: "LaMa_Big"
-  in_channels: 4  # RGB + Mask
-  out_channels: 3 # Reconstructed RGB
+  in_channels: 4  # G-R-NIR + Mask
+  out_channels: 3 # Reconstructed G-R-NIR
   
 training:
   batch_size: 4

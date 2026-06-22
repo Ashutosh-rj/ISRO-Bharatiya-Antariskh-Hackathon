@@ -3,7 +3,12 @@ import torch
 import numpy as np
 import logging
 import yaml
-import onnxruntime as ort
+try:
+    import onnxruntime as ort
+    ORT_AVAILABLE = True
+except ImportError as e:
+    ort = None
+    ORT_AVAILABLE = False
 from models.sar_fusion.model import SARFusionUNet
 
 logger = logging.getLogger(__name__)
@@ -15,6 +20,10 @@ class SARFusionInference:
             
         self.use_onnx = self.config['inference']['use_onnx']
         
+        if self.use_onnx and not ORT_AVAILABLE:
+            logger.warning("ONNX Runtime is not available in this environment. Falling back to PyTorch.")
+            self.use_onnx = False
+            
         if self.use_onnx:
             onnx_path = self.config['inference']['onnx_path']
             if not os.path.exists(onnx_path):
@@ -34,7 +43,15 @@ class SARFusionInference:
                 self.model.load_state_dict(torch.load(pth_path, map_location='cpu'))
             self.model.eval()
 
-    def infer(self, optical: np.ndarray, mask: np.ndarray, sar: np.ndarray = None) -> np.ndarray:
+    def infer(self, optical: np.ndarray, mask: np.ndarray, sar: np.ndarray = None, 
+              s2: np.ndarray = None, mc_dropout: bool = False, num_mc_passes: int = 10,
+              return_attention: bool = False) -> np.ndarray:
+        """
+        Infers the reconstructed image.
+        Returns pred if return_attention and mc_dropout are False.
+        If mc_dropout=True, returns (pred, uncertainty_map).
+        If return_attention=True, returns (pred, attention_map).
+        """
         is_uint8 = optical.dtype == np.uint8
         
         opt_f = optical.astype(np.float32) / 255.0 if is_uint8 else optical.astype(np.float32)
@@ -63,15 +80,41 @@ class SARFusionInference:
             sar_t = np.pad(sar_t, ((0,0), (0,0), (0, pad_h), (0, pad_w)), mode='reflect')
 
         if self.use_onnx:
+            # ONNX doesn't support MCD or returning arbitrary internal attention easily
             ort_inputs = {'optical': opt_t, 'mask': mask_t, 'sar': sar_t}
             pred_t = self.ort_session.run(None, ort_inputs)[0]
+            attention_t, uncertainty_t = None, None
         else:
-            with torch.no_grad():
-                pred_t = self.model(
-                    torch.from_numpy(opt_t), 
-                    torch.from_numpy(mask_t), 
-                    torch.from_numpy(sar_t)
-                ).numpy()
+            if mc_dropout:
+                self.model.train() # Enable Dropout
+                preds = []
+                with torch.no_grad():
+                    for _ in range(num_mc_passes):
+                        p = self.model(
+                            torch.from_numpy(opt_t), 
+                            torch.from_numpy(mask_t), 
+                            torch.from_numpy(sar_t)
+                        )
+                        if isinstance(p, tuple): p = p[0]
+                        preds.append(p.numpy())
+                
+                preds = np.stack(preds, axis=0)
+                pred_t = np.mean(preds, axis=0)
+                uncertainty_t = np.var(preds, axis=0).mean(axis=1, keepdims=True) # Mean var across channels
+                self.model.eval() # Restore
+                attention_t = None
+            else:
+                with torch.no_grad():
+                    out = self.model(
+                        torch.from_numpy(opt_t), 
+                        torch.from_numpy(mask_t), 
+                        torch.from_numpy(sar_t)
+                    )
+                    if isinstance(out, tuple):
+                        pred_t, attention_t = out[0].numpy(), out[1]
+                    else:
+                        pred_t, attention_t = out.numpy(), None
+                    uncertainty_t = None
                 
         if pad_h > 0 or pad_w > 0:
             pred_t = pred_t[:, :, :h, :w]
@@ -82,5 +125,15 @@ class SARFusionInference:
             pred = np.clip(pred * 255.0, 0, 255).astype(np.uint8)
         else:
             pred = np.clip(pred, 0.0, 1.0)
+            
+        if mc_dropout:
+            uncertainty = np.transpose(uncertainty_t[0], (1, 2, 0))
+            if pad_h > 0 or pad_w > 0: uncertainty = uncertainty[:h, :w]
+            return pred, uncertainty
+            
+        if return_attention and attention_t is not None:
+            # Format attention map if available
+            attention_map = attention_t.numpy()
+            return pred, attention_map
             
         return pred

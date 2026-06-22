@@ -47,14 +47,18 @@ $$ SAM_Loss = \frac{1}{N} \sum \arccos\left(\frac{x \cdot y}{\|x\| \|y\|}\right)
 - **Hardware Constraint:** System designed entirely around CPU inference. Models are exported to ONNX Opsets 14.
 - **Stitching:** Overlapping patches are reassembled using 2D Gaussian window blending to eliminate seam lines.
 
-## 5. Results
-Quantitative evaluation on synthetic hold-out data demonstrates the superiority of the SAR-Fusion approach.
+## 5. Evaluation Results
 
-| Metric | Baseline | LaMa | SAR-Fusion |
-|--------|----------|------|------------|
-| PSNR   | 22.4 dB  | 28.1 | **31.5 dB**|
-| SSIM   | 0.72     | 0.86 | **0.92**   |
-| SAM    | 0.45 rad | 0.22 | **0.15 rad**|
+To view the quantitative performance (PSNR, SSIM, SAM) of the models on the specific region of interest, you must execute the full end-to-end pipeline:
+
+1. **Dataset Generation:** Automatically fetches aligned Sentinel-2 optical and Sentinel-1 SAR patches.
+2. **Model Training:** Trains the LaMa and SAR-Fusion networks from scratch.
+3. **Benchmarking:** Computes metrics across the synthetic validation set.
+
+```bash
+python scripts/run_training.py
+```
+*(The generated results will populate the Streamlit dashboard automatically.)*
 
 ## 6. Conclusion
 The SAR-Fusion U-Net successfully utilizes Sentinel-1 data to guide the reconstruction of LISS-IV imagery. By optimizing the pipeline for ONNX CPU execution, we deliver an enterprise-grade, highly accessible tool for ISRO's operational use in cloud-prone regions.

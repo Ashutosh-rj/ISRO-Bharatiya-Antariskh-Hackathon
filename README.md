@@ -5,16 +5,16 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.32-FF4B4B.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-An enterprise-grade Generative AI platform for automated cloud removal and surface reconstruction in LISS-IV satellite imagery, specifically targeting the North Eastern Region (NER) of India. 
+An prototype Generative AI platform for automated cloud removal and surface reconstruction in LISS-IV satellite imagery, specifically targeting the North Eastern Region (NER) of India. 
 
 **Developed for ISRO's BAH 2026 Hackathon by Team Antriksh.**
 
 ## 🚀 Features
 
 - **Multimodal SAR-Fusion (Novel)**: Fuses C-band Sentinel-1 SAR data with LISS-IV optical data to reconstruct occluded areas based on structural ground-truth.
-- **CPU-Optimized Inference**: All models (LaMa, U-Net) are exported to ONNX for 3-5x faster inference on CPU-only hardware.
+- **CPU-Optimized Inference**: Targeting ONNX export for inference acceleration on CPU-only hardware.
 - **Geospatial Integrity**: Full GeoTIFF support. Processes data while preserving CRS (EPSG:32644) and metadata.
-- **Interactive Web App**: A production-ready Streamlit dashboard for real-time visualization, metric comparison, and interactive dataset exploration.
+- **Interactive Web App**: A prototype Streamlit dashboard for visualizing the model architecture and inference workflow.
 - **Spectral Fidelity**: Uses a custom Spectral Angle Mapper (SAM) loss during training to ensure NIR band consistency for downstream LULC and NDVI tasks.
 
 ## 🏗️ Architecture
@@ -93,11 +93,18 @@ cloud_free = model.inpaint(cloudy_image, mask)
 
 ## 📊 Evaluation Metrics
 
-| Model | PSNR ↑ | SSIM ↑ | LPIPS ↓ | SAM ↓ | CPU Inference (256px) |
-|-------|--------|--------|---------|-------|-----------------------|
-| OpenCV Baseline | 22.4 | 0.72 | 0.35 | 0.45 | **~0.01s** |
-| LaMa Inpainting | 28.1 | 0.86 | 0.18 | 0.22 | ~0.4s |
-| SAR-Fusion U-Net| **31.5** | **0.92** | **0.12** | **0.15** | ~0.6s |
+Run the comprehensive benchmark pipeline to evaluate the actual performance of the implemented models on the local dataset.
+*Note: Metrics reported only after real training and validation.*
+
+```bash
+# 1. Download real Sentinel-1/Sentinel-2 data and train the models
+python scripts/run_training.py --epochs 10
+
+# 2. Run the benchmarking suite
+python evaluation/benchmark.py
+```
+
+This will output `results/metrics_report.csv` containing measured PSNR, SSIM, LPIPS, and SAM scores.
 
 ## 📚 Documentation
 - [Technical Report](docs/TECHNICAL_REPORT.md)

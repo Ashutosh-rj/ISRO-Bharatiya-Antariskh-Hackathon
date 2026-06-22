@@ -58,6 +58,63 @@ def compute_sam(pred: np.ndarray, target: np.ndarray) -> float:
     
     return np.mean(sam_angles)
 
+def compute_ergas(pred: np.ndarray, target: np.ndarray, ratio: int = 1) -> float:
+    """
+    Erreur Relative Globale Adimensionnelle de Synthèse (ERGAS).
+    Widely used in remote sensing pan-sharpening and fusion.
+    """
+    pred = pred.astype(np.float32)
+    target = target.astype(np.float32)
+    
+    mean_target = np.mean(target, axis=(0, 1))
+    rmse_bands = np.sqrt(np.mean((pred - target)**2, axis=(0, 1)))
+    
+    # Avoid division by zero
+    mean_target[mean_target == 0] = 1e-10
+    
+    sum_ratio = np.sum((rmse_bands / mean_target)**2)
+    ergas = 100 * ratio * np.sqrt(sum_ratio / pred.shape[2])
+    return float(ergas)
+
+def compute_scc(pred: np.ndarray, target: np.ndarray) -> float:
+    """Spatial Correlation Coefficient (SCC)."""
+    # Apply high-pass filter (Sobel or simple Laplacian)
+    import cv2
+    pred_gray = cv2.cvtColor(pred.astype(np.float32), cv2.COLOR_RGB2GRAY)
+    target_gray = cv2.cvtColor(target.astype(np.float32), cv2.COLOR_RGB2GRAY)
+    
+    kernel = np.array([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]])
+    hp_pred = cv2.filter2D(pred_gray, -1, kernel)
+    hp_target = cv2.filter2D(target_gray, -1, kernel)
+    
+    # Compute correlation
+    hp_pred_flat = hp_pred.flatten()
+    hp_target_flat = hp_target.flatten()
+    
+    correlation = np.corrcoef(hp_pred_flat, hp_target_flat)[0, 1]
+    return float(correlation)
+
+def compute_ndvi_rmse(pred: np.ndarray, target: np.ndarray) -> float:
+    """
+    Computes RMSE of the NDVI index.
+    Assumes bands are Green (0), Red (1), NIR (2) for LISS-IV.
+    """
+    if pred.shape[2] < 3:
+        return 0.0
+        
+    def get_ndvi(img):
+        img_f = img.astype(np.float32)
+        red = img_f[:, :, 1]
+        nir = img_f[:, :, 2]
+        denominator = (nir + red)
+        denominator[denominator == 0] = 1e-10
+        return (nir - red) / denominator
+        
+    pred_ndvi = get_ndvi(pred)
+    target_ndvi = get_ndvi(target)
+    
+    return float(np.sqrt(np.mean((pred_ndvi - target_ndvi)**2)))
+
 def compute_rmse(pred: np.ndarray, target: np.ndarray) -> Dict[str, float]:
     """Compute Root Mean Square Error globally and per-band."""
     rmse_total = np.sqrt(np.mean((pred.astype(np.float32) - target.astype(np.float32)) ** 2))
@@ -85,6 +142,15 @@ class MetricsCalculator:
             metrics['LPIPS'] = None
             
         metrics['SAM'] = compute_sam(pred, target)
+        metrics['MAE'] = float(np.mean(np.abs(pred.astype(np.float32) - target.astype(np.float32))))
+        metrics['ERGAS'] = compute_ergas(pred, target)
+        
+        try:
+            metrics['SCC'] = compute_scc(pred, target)
+        except Exception:
+            metrics['SCC'] = 0.0
+            
+        metrics['NDVI_RMSE'] = compute_ndvi_rmse(pred, target)
         
         rmse_metrics = compute_rmse(pred, target)
         metrics.update(rmse_metrics)
