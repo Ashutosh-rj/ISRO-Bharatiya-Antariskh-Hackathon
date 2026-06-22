@@ -47,8 +47,10 @@ data/processed/
 data/cloud_masks/
 !data/sample/
 datasets/
-models/*/weights/*.pth
-models/*/weights/*.onnx
+*.pth
+*.onnx
+*.pt
+*.ckpt
 !models/*/weights/.gitkeep
 
 # Results
