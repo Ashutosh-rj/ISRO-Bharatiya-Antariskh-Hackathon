@@ -26,9 +26,9 @@ detector, baseline = load_models()
 
 def check_weights_exist(model_name):
     if model_name == "LaMa Inpainting":
-        return os.path.exists("models/lama/weights/lama_epoch_10.pth") or os.path.exists("models/lama/weights/lama.onnx")
+        return os.path.exists("models/lama/weights/lama_big.pth") or os.path.exists("models/lama/weights/lama.onnx")
     elif model_name == "SAR-Fusion U-Net":
-        return os.path.exists("models/sar_fusion/weights/sar_fusion_epoch_10.pth") or os.path.exists("models/sar_fusion/weights/sar_fusion.onnx")
+        return os.path.exists("models/sar_fusion/weights/sar_fusion_final.pth") or os.path.exists("models/sar_fusion/weights/sar_fusion.onnx")
     return True
 
 col1, col2 = st.columns([1, 2])
@@ -147,5 +147,5 @@ with col2:
                 st.image(uncertainty_mapped, caption="Monte Carlo Dropout Uncertainty Map (Red = High Variance)")
 
 st.markdown("---")
-st.subheader("🖼️ Full Gallery Viewer")
-st.info("Check out the pre-generated visual validation grid in `gallery/` for high-resolution 2x2 comparison matrices across 10 scenes.")
+st.subheader("🖼️ Real Data Showcase")
+st.info("Check out `real_data_samples.md` to see genuine STAC Sentinel-2 pairs pulled via our automated pipeline.")

@@ -66,7 +66,7 @@ class SARFusionTrainer:
         self.epochs_without_improvement = 0
 
     def train(self, npz_paths: list):
-        dataset = LISSIV_Dataset(npz_paths, augment=True)
+        dataset = LISSIV_Dataset(npz_paths, augment=False)
         
         # 80/20 train/val split
         val_size = max(1, int(0.2 * len(dataset)))
@@ -178,7 +178,10 @@ class SARFusionTrainer:
                 self.save_checkpoint(f"sar_fusion_epoch_{epoch+1}.pth")
             
         self.save_checkpoint("sar_fusion_final.pth")
-        self.export_onnx("sar_fusion.onnx")
+        try:
+            self.export_onnx("sar_fusion.onnx")
+        except Exception as e:
+            logger.warning(f"ONNX export failed: {e}")
 
     def save_checkpoint(self, filename: str):
         path = os.path.join(self.weights_dir, filename)

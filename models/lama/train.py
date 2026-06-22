@@ -42,7 +42,7 @@ class LaMaTrainer:
         os.makedirs(self.weights_dir, exist_ok=True)
 
     def train(self, npz_paths: list):
-        dataset = LISSIV_Dataset(npz_paths, augment=True)
+        dataset = LISSIV_Dataset(npz_paths, augment=False)
         
         # 80/20 train/val split
         val_size = max(1, int(0.2 * len(dataset)))
@@ -100,7 +100,10 @@ class LaMaTrainer:
                 
         # Final save
         self.save_checkpoint("lama_big.pth")
-        self.export_onnx("lama_big.onnx")
+        try:
+            self.export_onnx("lama_big.onnx")
+        except Exception as e:
+            logger.warning(f"ONNX export failed (expected for FFT ops): {e}")
 
     def save_checkpoint(self, filename: str):
         path = os.path.join(self.weights_dir, filename)

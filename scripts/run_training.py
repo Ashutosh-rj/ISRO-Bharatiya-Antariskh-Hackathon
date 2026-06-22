@@ -8,7 +8,7 @@ sys.path.append(project_root)
 
 from models.lama.train import LaMaTrainer
 from models.sar_fusion.train import SARFusionTrainer
-from scripts.generate_dataset import main as generate_data
+# from scripts.generate_dataset import main as generate_data
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("TrainingOrchestrator")
