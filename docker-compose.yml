@@ -13,6 +13,8 @@ services:
       - ./app:/app/app
       - ./pipeline:/app/pipeline
       - ./evaluation:/app/evaluation
+      - ./configs:/app/configs
+      - ./scripts:/app/scripts
     env_file:
       - .env
     environment:

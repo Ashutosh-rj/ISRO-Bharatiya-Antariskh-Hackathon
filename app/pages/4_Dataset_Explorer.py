@@ -1,6 +1,6 @@
 import streamlit as st
 import folium
-from streamlit_folium import st_folium
+
 
 st.set_page_config(page_title="Dataset Explorer", page_icon="🌍", layout="wide")
 st.title("🌍 NER Dataset Explorer")
@@ -22,7 +22,8 @@ folium.Rectangle(
     popup="NER Training Region"
 ).add_to(m)
 
-st_data = st_folium(m, width=1000, height=500)
+import streamlit.components.v1 as components
+components.html(m._repr_html_(), height=500)
 
 st.subheader("Data Modalities Used")
 col1, col2, col3 = st.columns(3)

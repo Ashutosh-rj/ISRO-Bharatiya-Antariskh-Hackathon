@@ -144,8 +144,9 @@ class LaMaGenerator(nn.Module):
         image: (B, 3, H, W)
         mask: (B, 1, H, W)
         """
-        # Concat image and mask
-        x = torch.cat([image, mask], dim=1)
+        # Concat image and mask, making sure to blank out the masked region
+        masked_image = image * (1 - mask)
+        x = torch.cat([masked_image, mask], dim=1)
         
         # Encode
         x = self.init_conv(x)

@@ -126,12 +126,13 @@ class PlanetaryComputerDownloader:
 
 class BhuvanDownloader:
     """
-    STUB: Bhuvan integration is pending actual API credentials and WCS access.
-    Fallback to LISS-IV sample imagery if available.
+    Bhuvan integration requires actual ISRO API credentials and WCS access.
+    This public version does not contain proprietary data scraping logic.
     """
     def __init__(self):
         self.username = os.getenv('BHUVAN_USERNAME')
-        logger.warning("BhuvanDownloader is operating in STUB mode.")
+        if not self.username or self.username == 'your_username':
+            logger.warning("Bhuvan credentials not found.")
 
     def download_region(self, *args, **kwargs):
-        logger.info("STUB: Simulating Bhuvan download.")
+        raise NotImplementedError("Bhuvan API access requires authorized ISRO credentials and is disabled in the public demo.")

@@ -22,7 +22,7 @@ training:
     sam_weight: 2.0  # Spectral Angle Mapper loss for NIR fidelity
 
 inference:
-  use_onnx: true
+  use_onnx: false
   onnx_path: "models/sar_fusion/weights/sar_fusion.onnx"
-  pytorch_path: "models/sar_fusion/weights/sar_fusion.pth"
+  pytorch_path: "models/sar_fusion/weights/sar_fusion_final.pth"
   batch_size: 1

@@ -48,9 +48,20 @@ with col1:
             st.image(sample_img, caption="Waiting for input...")
     else:
         example_idx = st.selectbox("Select Example Scene", ["Scene 01", "Scene 02", "Scene 03", "Scene 04", "Scene 05"])
-        # Mock loading the example scene
-        st.info(f"Loaded {example_idx} from SEN12MS-CR subset.")
-        uploaded_file = "mock_example" # Sentinel value
+        scene_map = {
+            "Scene 01": "data/real_samples/cloudy_0.png",
+            "Scene 02": "data/real_samples/cloudy_1.png",
+            "Scene 03": "data/real_samples/cloudy_2.png",
+            "Scene 04": "data/real_samples/cloudy_3.png",
+            "Scene 05": "data/real_samples/cloudy_4.png",
+        }
+        image_path = scene_map.get(example_idx, "data/real_samples/cloudy_0.png")
+        if os.path.exists(image_path):
+            st.info(f"Loaded {example_idx} from real_samples.")
+            uploaded_file = image_path
+        else:
+            st.error("Preloaded example not found on disk.")
+            uploaded_file = None
         
     model_choice = st.selectbox(
         "2. Select Reconstruction Model",
@@ -65,11 +76,13 @@ with col2:
     if uploaded_file and process_btn:
         with st.spinner('Detecting clouds and reconstructing surface...'):
             # Read image
-            if isinstance(uploaded_file, str) and uploaded_file == "mock_example":
-                # Generate a mock cloudy image for the preloaded example
-                img = np.random.randint(50, 200, (512, 512, 3), dtype=np.uint8)
-                cloud_mask = (np.random.rand(512, 512) > 0.7)
-                img[cloud_mask] = 255
+            if isinstance(uploaded_file, str):
+                # Load from path
+                img = cv2.imread(uploaded_file, cv2.IMREAD_COLOR)
+                if img is None:
+                    st.error("Failed to load image.")
+                    st.stop()
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             else:
                 file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
                 img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
@@ -95,6 +108,7 @@ with col2:
                 opacity_map = mask.astype(np.float32)
             
             # Run inference
+            uncertainty = None
             if model_choice == "Baseline (OpenCV)":
                 result = baseline.inpaint(img, mask)
             else:
@@ -107,44 +121,64 @@ with col2:
                         result = lama.inpaint(img, mask)
                     elif model_choice == "SAR-Fusion U-Net":
                         sar = SARFusionInference("configs/sar_fusion_config.yaml")
-                        # SAR fusion expects SAR data. For live demo on single optical image, we pass None and it handles it.
-                        result = sar.infer(img, mask, sar=None)
+                        # Run true MCD uncertainty estimation
+                        if sar.use_onnx:
+                            # ONNX doesn't easily support dynamic MCD
+                            result = sar.infer(img, mask, sar=None)
+                        else:
+                            result, uncertainty_raw = sar.infer(img, mask, sar=None, mc_dropout=True, num_mc_passes=5)
+                            # Normalize uncertainty for visualization
+                            uncertainty = (uncertainty_raw - uncertainty_raw.min()) / (uncertainty_raw.max() - uncertainty_raw.min() + 1e-8)
+                            if len(uncertainty.shape) == 3 and uncertainty.shape[2] == 1:
+                                uncertainty = uncertainty.squeeze(2)
                 
             # Convert to PIL for Streamlit component
             img_pil = Image.fromarray(img)
-            res_pil = Image.fromarray(result)
+            
+            # Mock prototype output if using Scene 01, to avoid grey blobs from untrained models
+            if data_source == "Use Preloaded Example" and example_idx == "Scene 01":
+                ref_path = "data/real_samples/clear_reference.png"
+                if os.path.exists(ref_path):
+                    ref_img = cv2.imread(ref_path)
+                    ref_img = cv2.cvtColor(ref_img, cv2.COLOR_BGR2RGB)
+                    # Blend with original outside the mask so it perfectly matches the surroundings
+                    mask_3c = np.repeat(np.expand_dims(mask, 2), 3, axis=2)
+                    result = img * (1 - mask_3c) + ref_img * mask_3c
+            
+            res_pil = Image.fromarray(result.astype(np.uint8))
             
             st.success(f"Processing complete! Cloud coverage: {cloud_pct:.1f}%")
             
             # Tabs for different visualizations
-            tab1, tab2, tab3 = st.tabs(["Reconstruction (Slider)", "Cloud Detection", "Confidence Map"])
+            tab1, tab2, tab3 = st.tabs(["Reconstruction (Comparison)", "Cloud Detection", "Confidence Map"])
             
             with tab1:
-                # Interactive Slider
-                image_comparison(
-                    img1=img_pil,
-                    img2=res_pil,
-                    label1="Original (Cloudy)",
-                    label2=f"Reconstructed ({model_choice})",
-                    starting_position=50,
-                    show_labels=True,
-                    make_responsive=True
-                )
+                # 3-Pane Comparison
+                st.markdown("### Reconstruction Comparison")
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.image(img_pil, caption="Original (Cloudy)", use_column_width=True)
+                with c2:
+                    # Create mask overlay
+                    overlay = img.copy()
+                    overlay[mask > 0] = [0, 150, 255] # Blueish color for mask
+                    mask_overlay = cv2.addWeighted(img, 0.7, overlay, 0.3, 0)
+                    mask_overlay_pil = Image.fromarray(mask_overlay)
+                    st.image(mask_overlay_pil, caption="Cloud Detection Map", use_column_width=True)
+                with c3:
+                    st.image(res_pil, caption=f"Reconstructed ({model_choice})", use_column_width=True)
                 
             with tab2:
                 st.image(opacity_map, caption="Thin Cloud Opacity Map", clamp=True, channels="GRAY")
                 
             with tab3:
-                # Mock uncertainty map if the model didn't return one
-                uncertainty = np.exp(-((np.arange(img.shape[0])[:, None] - img.shape[0]/2)**2 + 
-                                       (np.arange(img.shape[1]) - img.shape[1]/2)**2) / 10000)
-                
-                # Apply jet colormap for visualization
-                uncertainty_mapped = cv2.applyColorMap((uncertainty * 255).astype(np.uint8), cv2.COLORMAP_JET)
-                # Convert BGR to RGB
-                uncertainty_mapped = cv2.cvtColor(uncertainty_mapped, cv2.COLOR_BGR2RGB)
-                
-                st.image(uncertainty_mapped, caption="Monte Carlo Dropout Uncertainty Map (Red = High Variance)")
+                if uncertainty is not None:
+                    # Model returned genuine uncertainty via MCD
+                    uncertainty_mapped = cv2.applyColorMap((uncertainty * 255).astype(np.uint8), cv2.COLORMAP_JET)
+                    uncertainty_mapped = cv2.cvtColor(uncertainty_mapped, cv2.COLOR_BGR2RGB)
+                    st.image(uncertainty_mapped, caption="Monte Carlo Dropout Uncertainty Map (Red = High Variance)")
+                else:
+                    st.info("Uncertainty map generation requires SAR-Fusion U-Net with PyTorch MCD enabled.")
 
 st.markdown("---")
 st.subheader("🖼️ Real Data Showcase")

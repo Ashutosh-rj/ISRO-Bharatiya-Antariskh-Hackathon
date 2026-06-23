@@ -2,9 +2,9 @@
 torch==2.1.0
 torchvision==0.16.0
 torchaudio==2.1.0
-onnxruntime==1.16.3
+onnxruntime>=1.17.1
 opencv-python>=4.9.0
-streamlit==1.32.2
+streamlit==1.35.0
 plotly==5.19.0
 folium==0.16.0
 streamlit-folium==0.17.0

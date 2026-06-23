@@ -69,16 +69,15 @@ class OtsuCloudDetector(BaseCloudDetector):
         
         return (cloud_mask > 0).astype(np.uint8), (shadow_mask > 0).astype(np.uint8), opacity_map
 
-class FmaskCloudDetector(BaseCloudDetector):
+class AdaptiveThresholdDetector(BaseCloudDetector):
     """
-    Simplified Fmask (Function of mask) algorithm wrapper.
-    In a full implementation, this would integrate with the Fmask python package.
+    Adaptive thresholding based cloud detector.
+    This was previously labeled as an Fmask implementation but operates via OpenCV adaptive thresholding.
     """
     def detect(self, image: np.ndarray) -> np.ndarray:
-        logger.info("Fmask detection invoked. Using simplified fallback for this demo.")
-        # Fallback to Otsu since true Fmask requires TOA reflectance and thermal bands
-        # which LISS-IV lacks (LISS-IV only has Green, Red, NIR).
-        # We will emulate an advanced detector using adaptive thresholding.
+        logger.info("Adaptive Threshold detection invoked.")
+        
+        # We emulate an advanced detector using adaptive thresholding.
         
         nir_band = image[:, :, 2] if image.shape[2] >= 3 else image[:, :, 0]
         if nir_band.dtype != np.uint8:
@@ -132,8 +131,8 @@ class CloudDetectionPipeline:
     def __init__(self, method: str = 'otsu'):
         if method.lower() == 'otsu':
             self.detector = OtsuCloudDetector()
-        elif method.lower() == 'fmask':
-            self.detector = FmaskCloudDetector()
+        elif method.lower() == 'adaptive':
+            self.detector = AdaptiveThresholdDetector()
         else:
             raise ValueError(f"Unknown detection method: {method}")
 
