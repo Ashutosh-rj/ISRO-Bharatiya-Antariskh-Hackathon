@@ -1,48 +1,109 @@
-/* ISRO Theme CSS */
+/* ISRO BAH 2026 Premium Theme */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+
 :root {
     --isro-blue: #003087;
+    --isro-light-blue: #0056b3;
     --space-orange: #FF6B35;
-    --dark-bg: #0F111A;
-    --panel-bg: #1E2233;
+    --dark-bg: #0b0c10;
+    --panel-bg: rgba(30, 34, 51, 0.6);
+    --glass-border: rgba(255, 255, 255, 0.1);
 }
 
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* Background */
 .stApp {
-    background-color: var(--dark-bg);
-    color: white;
+    background: radial-gradient(circle at top right, #111a2e 0%, var(--dark-bg) 70%);
+    color: #e0e6ed;
 }
 
+/* Glassmorphism Sidebar */
 [data-testid="stSidebar"] {
-    background-color: var(--panel-bg);
+    background: rgba(15, 17, 26, 0.7) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border-right: 1px solid var(--glass-border);
 }
 
+/* Buttons */
 .stButton>button {
-    background-color: var(--space-orange);
+    background: linear-gradient(135deg, var(--space-orange) 0%, #e55c2b 100%);
     color: white;
-    border-radius: 4px;
-    border: none;
-    font-weight: bold;
-    transition: all 0.3s ease;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.2);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
 }
 
 .stButton>button:hover {
-    background-color: #e55c2b;
-    border-color: var(--space-orange);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 107, 53, 0.5);
+    border-color: rgba(255,255,255,0.4);
     color: white;
 }
 
-h1, h2, h3 {
-    color: white;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+/* Typography */
+h1, h2, h3, h4 {
+    color: #ffffff;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
+
+h1 {
+    background: -webkit-linear-gradient(45deg, #ffffff, #a3b8cc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 /* Metric Cards */
-[data-testid="stMetricValue"] {
-    color: var(--space-orange);
+[data-testid="metric-container"] {
+    background: var(--panel-bg);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 15px 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease;
 }
 
-/* Info Boxes */
+[data-testid="metric-container"]:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+[data-testid="stMetricValue"] {
+    color: var(--space-orange);
+    font-weight: 800;
+}
+
+/* Info/Alert Boxes */
 .stAlert {
-    background-color: rgba(0, 48, 135, 0.2);
-    border-left: 4px solid var(--isro-blue);
-    color: white;
+    background: rgba(0, 48, 135, 0.15) !important;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(0, 48, 135, 0.3);
+    border-left: 4px solid var(--isro-light-blue);
+    border-radius: 8px;
+    color: #e0e6ed;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+    background-color: transparent;
+    border-bottom: 2px solid var(--glass-border);
+}
+
+.stTabs [data-baseweb="tab"] {
+    color: #a3b8cc;
+    font-weight: 600;
+}
+
+.stTabs [aria-selected="true"] {
+    color: var(--space-orange) !important;
+    border-bottom-color: var(--space-orange) !important;
 }

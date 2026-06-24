@@ -7,8 +7,7 @@ services:
       - "8501:8501"
     volumes:
       - ./data:/app/data
-      - ./models/lama/weights:/app/models/lama/weights
-      - ./models/sar_fusion/weights:/app/models/sar_fusion/weights
+      - ./models:/app/models
       - ./results:/app/results
       - ./app:/app/app
       - ./pipeline:/app/pipeline
@@ -19,8 +18,3 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G

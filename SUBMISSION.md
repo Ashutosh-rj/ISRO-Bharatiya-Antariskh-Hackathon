@@ -13,14 +13,14 @@
 - [x] GeoTIFF CRS (EPSG:32644) preservation
 
 ## Phase 3: Models
-- [x] Baseline OpenCV Inpainting
-- [x] LaMa Inpainting (Generative)
-- [x] SAR-Fusion Dual-Encoder U-Net (Generative + Multimodal)
-- [x] ONNX Export pipeline for all deep models
+- [x] Generative AI: LaMa Inpainting (cGAN)
+- [x] Multi-modal Fusion: SAR-Fusion Dual-Encoder U-Net
+- [x] Spectral Consistency: SAM (Spectral Angle Mapper) loss integration
+- [x] CPU/ONNX Export for fast execution
 
 ## Phase 4: Evaluation & UI
 - [x] PSNR, SSIM, SAM, RMSE metrics implemented
-- [x] Interactive Streamlit App with 5 detailed pages
+- [x] Interactive Streamlit App with 3 focused pages
 - [x] Before/After split-screen slider
 
 ## Phase 5: Documentation

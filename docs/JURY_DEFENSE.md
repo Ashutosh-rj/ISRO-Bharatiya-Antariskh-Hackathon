@@ -1,5 +1,5 @@
 # JURY DEFENSE PACKAGE
-## Team CloudBusters (Formerly Antriksh) - ISRO BAH 2026
+## Team Antriksh - ISRO BAH 2026
 
 This document serves as the master technical defense for the Grand Finale Jury.
 
@@ -10,20 +10,16 @@ This document serves as the master technical defense for the Grand Finale Jury.
 
 ### 2. Generative AI Architecture
 - **cGAN + PatchGAN:** The deterministic U-Net was upgraded to a Conditional GAN. The Generator fuses SAR + Optical via a `CrossModalTransformer`, while the `PatchGANDiscriminator` enforces localized textural realism.
-- **Diffusion Refinement:** A Conditional DDPM module iteratively refines the generated outputs to perfectly align with the high-frequency surface distribution of the target region.
 
-### 3. Multi-Modal & Temporal Fusion
+### 3. Multi-Modal Fusion
 - **SAR Integration:** Sentinel-1 C-band VV/VH data penetrates clouds.
 - **Cross-Modal Transformer:** Replaced basic concatenation with a Multi-Head Attention mechanism allowing Optical queries to extract features from SAR keys/values.
-- **Temporal Transformer:** Implemented time-series persistence modeling (T-1 to T-4) to guarantee structural immutability (e.g., roads, buildings).
 
 ### 4. Cloud & Haze Understanding
 - **Opacity Mapping:** Thin clouds are no longer binarized; they generate an opacity gradient (0-1).
 - **Shadow Detection:** NIR morphological heuristics extract and map cloud shadows to prevent them from being reconstructed as lakes/waterbodies.
 - **Haze Removal:** Dark Channel Prior applied to visible bands.
 
-### 5. Explainable AI & Engineering
-- **MCD Uncertainty Heatmaps:** Monte Carlo Dropout provides a variance map (uncertainty), critical for downstream GIS operations.
-- **Mixed Precision (AMP) & W&B:** Deployed for rapid training and rigorous experiment tracking.
-
-**Final Score Target:** 88-92 / 100.
+### 5. LISS-IV vs. Sentinel Domain Gap
+While our architecture is designed for high-resolution multispectral data, we acknowledge the domain gap between our training dataset (SEN12MS-CR) and the target LISS-IV sensor. LISS-IV has different spectral response functions, spatial resolution (5.8m vs 10m/20m), and noise profiles compared to Sentinel-2. 
+**Mitigation Plan:** Our solution is architected to support transfer learning. The current weights provide strong structural and cross-modal priors. For true LISS-IV operational deployment, we propose a fine-tuning phase using an adversarial domain adaptation loss (e.g., CycleGAN or a domain classifier) on unpaired clear LISS-IV images to adapt the Sentinel-trained generator to the specific radiometric properties of the LISS-IV sensor without requiring perfectly paired cloudy/clear LISS-IV datasets.

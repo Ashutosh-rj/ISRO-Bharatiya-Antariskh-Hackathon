@@ -22,25 +22,25 @@ with st.sidebar:
     st.markdown("""
     **Team Antriksh**
     
-    Building a Generative AI platform prototype for 
-    automated cloud removal and surface reconstruction in 
-    LISS-IV imagery.
+    A Generative AI-based framework for automated cloud removal and surface reconstruction in LISS-IV imagery.
     """)
     st.markdown("---")
-    st.info("CPU-Optimized Pipeline")
+    st.info("Aligned with ISRO BAH 2026")
 
 # Main Content
 st.title("🛰️ LISS-IV Cloud Removal & Reconstruction")
 
 st.markdown("""
-### Welcome to the ISRO BAH 2026 Submission
+### Generative AI-Based Framework
 
-Persistent cloud cover is a major challenge in optical remote sensing over tropical regions like North Eastern India. This platform demonstrates a state-of-the-art Generative AI pipeline for cloud removal:
+Persistent cloud cover is a major challenge in optical remote sensing, particularly over tropical and mountainous regions such as the North Eastern Region (NER) of India. Clouds and cloud shadows significantly reduce the usability of optical satellite imagery for applications such as **land use–land cover mapping**, **disaster monitoring**, and **environmental assessment**.
 
-1. **True Generative AI (cGAN):** A robust Conditional GAN with PatchGAN Discriminator.
-2. **Multi-Modal Fusion:** Cross-Modal Transformers combining LISS-IV optical and Sentinel-1 SAR imagery.
-3. **Temporal Reasoning:** Transformer-based modeling of historical cloud-free persistence.
-4. **Explainable AI:** Monte Carlo Dropout (MCD) for Uncertainty Heatmaps and Attention Visualization.
+This platform demonstrates our solution to **automated cloud removal and surface reconstruction in LISS-IV imagery** while preserving fine-scale spatial details and spectral consistency.
+
+#### Key Innovations:
+1. **Generative AI (cGAN/LaMa):** A robust Conditional GAN for high-fidelity spatial reconstruction.
+2. **Multi-Modal Fusion:** Fusing LISS-IV optical imagery with auxiliary **Sentinel-1 SAR imagery** to penetrate clouds and retrieve ground structure.
+3. **Spectral Consistency:** Employing Spectral Angle Mapper (SAM) loss to preserve the integrity of the NIR band for downstream tasks (e.g., NDVI).
 
 👈 **Select a page from the sidebar to explore the platform.**
 """)
@@ -48,10 +48,10 @@ Persistent cloud cover is a major challenge in optical remote sensing over tropi
 # Quick Metrics
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric(label="Models Available", value="3")
+    st.metric(label="Primary Data", value="LISS-IV")
 with col2:
-    st.metric(label="Target Area", value="North Eastern Region")
+    st.metric(label="Auxiliary Data", value="Sentinel-1 SAR")
 with col3:
-    st.metric(label="Hardware Target", value="CPU Only")
+    st.metric(label="Target Region", value="NER India")
 
-st.info("👈 Select **Live Demo** to run inference, or **Model Comparison** to view benchmark results (if computed).")
+st.info("👈 Select **Live Demo** to run inference and explore the pipeline.")

@@ -1,39 +1,36 @@
-# LISS-IV Cloud Removal & Surface Reconstruction
+# Generative AI-Based Cloud Removal for LISS-IV Imagery
 
 ![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.1%20CPU-EE4C2C.svg)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.32-FF4B4B.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-An prototype Generative AI platform for automated cloud removal and surface reconstruction in LISS-IV satellite imagery, specifically targeting the North Eastern Region (NER) of India. 
+Persistent cloud cover is a major challenge in optical remote sensing, particularly over tropical regions such as the North Eastern Region (NER) of India. Clouds reduce the usability of optical satellite imagery for land use–land cover mapping, disaster monitoring, and environmental assessment. 
 
-**Developed for ISRO's BAH 2026 Hackathon by Team Antriksh.**
+To solve this, Team Antriksh developed a **Generative AI-based framework** for automated cloud removal and surface reconstruction in high-resolution LISS-IV imagery. 
 
-## 🚀 Features
+## 🚀 Key Innovations (Aligned with ISRO BAH 2026)
 
-- **Multimodal SAR-Fusion (Novel)**: Fuses C-band Sentinel-1 SAR data with LISS-IV optical data to reconstruct occluded areas based on structural ground-truth.
-- **CPU-Optimized Inference**: Targeting ONNX export for inference acceleration on CPU-only hardware.
-- **Geospatial Integrity**: Full GeoTIFF support. Processes data while preserving CRS (EPSG:32644) and metadata.
-- **Interactive Web App**: A prototype Streamlit dashboard for visualizing the model architecture and inference workflow.
-- **Spectral Fidelity**: Uses a custom Spectral Angle Mapper (SAM) loss during training to ensure NIR band consistency for downstream LULC and NDVI tasks.
+- **Multi-Modal Fusion (SAR-Fusion)**: Leverages auxiliary Sentinel-1 SAR imagery to penetrate cloud cover and retrieve underlying structural information.
+- **Generative AI Reconstruction (cGAN)**: Utilizes a Conditional GAN (adapted from LaMa) to generate cloud-free imagery while preserving fine-scale spatial details.
+- **Spectral Consistency**: Implements a Spectral Angle Mapper (SAM) loss function during training to ensure the generated imagery maintains accurate spectral signatures (crucial for NIR band and NDVI calculations).
+- **Geospatial Integrity**: Full GeoTIFF support. Processes data while preserving CRS (EPSG:32644) and metadata without information loss.
 
 ## 🏗️ Architecture
 
 ```mermaid
 graph TD
-    A[Bhuvan LISS-IV] --> C(Preprocessing & Tiling)
+    A[Bhuvan LISS-IV] --> C(Preprocessing & Masking)
     B[Copernicus SAR] --> C
     C --> D{Cloud Detection}
-    D -->|Mask| E[Model Router]
+    D -->|Mask| E[Generative AI Framework]
     
-    E -->|<10% Cloud| F[OpenCV Baseline]
-    E -->|10-60% Cloud| G[LaMa Inpainting]
-    E -->|>60% Cloud| H[SAR-Fusion U-Net]
+    E -->|Spatial Detail Preservation| G[LaMa Inpainting cGAN]
+    E -->|Multi-Modal Auxiliary Data| H[SAR-Fusion U-Net]
     
-    F --> I(Gaussian Stitching)
-    G --> I
+    G --> I(Geospatial Assembly & SAM Loss Check)
     H --> I
-    I --> J[Cloud-Free GeoTIFF]
+    I --> J[Cloud-Free GeoTIFF for LULC/Disaster Monitoring]
 ```
 
 ## ⚙️ Installation

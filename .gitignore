@@ -82,3 +82,12 @@ Thumbs.db
 htmlcov/
 .tox/
 .mypy_cache/
+
+# Backup files (e.g. hidden streamlit pages)
+*.bak
+*.tmp
+
+# Training outputs and reports
+checkpoints/
+training_logs/
+reports/

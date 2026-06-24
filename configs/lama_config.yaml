@@ -16,8 +16,8 @@ training:
     fft_weight: 1.0
 
 inference:
-  use_onnx: false
-  onnx_path: "models/lama/weights/lama_big.onnx"
+  use_onnx: true
+  onnx_path: "models/lama/weights/lama.onnx"
   pytorch_path: "models/lama/weights/lama_big.pth"
   batch_size: 1
   pad_to_multiple: 8

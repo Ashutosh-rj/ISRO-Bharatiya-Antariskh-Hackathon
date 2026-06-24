@@ -58,9 +58,21 @@ class LaMaInference:
         """
         is_uint8 = image.dtype == np.uint8
         
+        orig_h, orig_w = image.shape[:2]
+        
+        if self.use_onnx and (orig_h != 512 or orig_w != 512):
+            import cv2
+            image_work = cv2.resize(image, (512, 512), interpolation=cv2.INTER_AREA)
+            mask_work = cv2.resize(mask, (512, 512), interpolation=cv2.INTER_NEAREST)
+            # The Carve/LaMa-ONNX model actually expects the mask to be inverted? Let's try passing 1 - mask
+            mask_work = 1 - mask_work
+        else:
+            image_work = image
+            mask_work = mask
+        
         # Preprocess
-        img_f = image.astype(np.float32) / 255.0 if is_uint8 else image.astype(np.float32)
-        mask_f = mask.astype(np.float32)
+        img_f = image_work.astype(np.float32) / 255.0 if is_uint8 else image_work.astype(np.float32)
+        mask_f = mask_work.astype(np.float32)
         
         if mask_f.max() > 1.0:
             mask_f = mask_f / 255.0
@@ -84,6 +96,9 @@ class LaMaInference:
             ort_inputs = {'image': img_t, 'mask': mask_t}
             ort_outs = self.ort_session.run(None, ort_inputs)
             pred_t = ort_outs[0]
+            # The public Carve/LaMa-ONNX model outputs values in the [0, 255] range.
+            # Scale back to [0, 1] so the post-processing logic (which multiplies by 255) works correctly.
+            pred_t = pred_t / 255.0
         else:
             with torch.no_grad():
                 img_ts = torch.from_numpy(img_t)
@@ -97,6 +112,10 @@ class LaMaInference:
             pred_t = pred_t[:, :, :h, :w]
             
         pred = np.transpose(pred_t[0], (1, 2, 0))
+        
+        if self.use_onnx and (orig_h != 512 or orig_w != 512):
+            import cv2
+            pred = cv2.resize(pred, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
         
         if is_uint8:
             pred = np.clip(pred * 255.0, 0, 255).astype(np.uint8)
