@@ -30,9 +30,9 @@ class SAMLoss(nn.Module):
         # Compute dot product
         dot = torch.sum(pred_flat * target_flat, dim=1)
         
-        # Compute magnitudes
-        pred_norm = torch.norm(pred_flat, dim=1).clamp(min=self.eps)
-        target_norm = torch.norm(target_flat, dim=1).clamp(min=self.eps)
+        # Compute magnitudes safely (sqrt(sum(x^2) + eps^2))
+        pred_norm = torch.sqrt(torch.sum(pred_flat**2, dim=1) + self.eps**2)
+        target_norm = torch.sqrt(torch.sum(target_flat**2, dim=1) + self.eps**2)
         
         # Calculate angle
         cos_theta = (dot / (pred_norm * target_norm)).clamp(-1.0 + self.eps, 1.0 - self.eps)

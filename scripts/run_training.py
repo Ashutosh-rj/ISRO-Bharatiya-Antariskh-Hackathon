@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import argparse
+import random
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
@@ -37,7 +38,15 @@ def main():
         sys.exit(1)
 
     train_files = get_npz_files(train_dir)
+    train_files.sort() # Ensure stable sorting
     logger.info(f"Found {len(train_files)} training patches.")
+    
+    # Generate identical train/val split for all models
+    random.seed(42)
+    random.shuffle(train_files)
+    val_size = max(1, int(0.2 * len(train_files)))
+    train_split = train_files[:-val_size]
+    val_split = train_files[-val_size:]
 
     # 2. Train LaMa
     logger.info("Step 2: Training LaMa Generator...")
@@ -45,7 +54,7 @@ def main():
     lama_trainer = LaMaTrainer(lama_config)
     # Override epochs from args
     lama_trainer.config['training']['epochs'] = args.epochs
-    lama_trainer.train(train_files)
+    lama_trainer.train(train_split, val_split)
 
     # 3. Train SAR-Fusion
     logger.info("Step 3: Training SAR-Fusion U-Net...")
@@ -53,7 +62,7 @@ def main():
     sar_trainer = SARFusionTrainer(sar_config)
     # Override epochs from args
     sar_trainer.config['training']['epochs'] = args.epochs
-    sar_trainer.train(train_files)
+    sar_trainer.train(train_split, val_split)
 
     logger.info("Training complete! Weights saved to models/*/weights/")
 

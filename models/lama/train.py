@@ -41,13 +41,12 @@ class LaMaTrainer:
         self.weights_dir = "models/lama/weights"
         os.makedirs(self.weights_dir, exist_ok=True)
 
-    def train(self, npz_paths: list):
-        dataset = LISSIV_Dataset(npz_paths, augment=False)
+    def train(self, train_paths: list, val_paths: list):
+        train_dataset = LISSIV_Dataset(train_paths, augment=False)
+        val_dataset = LISSIV_Dataset(val_paths, augment=False)
         
-        # 80/20 train/val split
-        val_size = max(1, int(0.2 * len(dataset)))
-        train_size = len(dataset) - val_size
-        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+        train_size = len(train_dataset)
+        val_size = len(val_dataset)
         
         train_loader = DataLoader(train_dataset, batch_size=self.config['training']['batch_size'], shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=self.config['training']['batch_size'], shuffle=False)

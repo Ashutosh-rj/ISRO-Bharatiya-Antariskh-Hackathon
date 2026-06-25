@@ -55,23 +55,23 @@ class SARFusionTrainer:
         self.weights_dir = "models/sar_fusion/weights"
         os.makedirs(self.weights_dir, exist_ok=True)
         
-        # Engineering Excellence: AMP and Experiment Tracking
-        self.scaler = GradScaler(enabled=self.device.type == 'cuda')
+        # Experiment Tracking
         self.use_wandb = self.config.get('use_wandb', False)
         if self.use_wandb:
             wandb.init(project="LISS4-Cloud-Removal", config=self.config)
+            
+        torch.autograd.set_detect_anomaly(True)
             
         self.best_val_loss = float('inf')
         self.patience = self.config['training'].get('patience', 10)
         self.epochs_without_improvement = 0
 
-    def train(self, npz_paths: list):
-        dataset = LISSIV_Dataset(npz_paths, augment=False)
+    def train(self, train_paths: list, val_paths: list):
+        train_dataset = LISSIV_Dataset(train_paths, augment=False)
+        val_dataset = LISSIV_Dataset(val_paths, augment=False)
         
-        # 80/20 train/val split
-        val_size = max(1, int(0.2 * len(dataset)))
-        train_size = len(dataset) - val_size
-        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+        train_size = len(train_dataset)
+        val_size = len(val_dataset)
         
         train_loader = DataLoader(train_dataset, batch_size=self.config['training']['batch_size'], shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=self.config['training']['batch_size'], shuffle=False)
@@ -94,42 +94,39 @@ class SARFusionTrainer:
                 # ---------------------
                 self.opt_d.zero_grad()
                 
-                with autocast(enabled=self.device.type == 'cuda'):
-                    # Forward pass Generator
-                    pred, _ = self.model(cloudy, mask, sar)
+                # Forward pass Generator
+                pred, _ = self.model(cloudy, mask, sar)
+                
+                # Real Input to D: [cloudy, mask, target] -> target is real
+                real_input_d = torch.cat([cloudy, mask, target], dim=1)
+                pred_real_d = self.discriminator(real_input_d)
+                loss_d_real = self.gan_loss_fn(pred_real_d, target_is_real=True)
+                
+                # Fake Input to D: [cloudy, mask, pred] -> pred is fake
+                fake_input_d = torch.cat([cloudy, mask, pred.detach()], dim=1)
+                pred_fake_d = self.discriminator(fake_input_d)
+                loss_d_fake = self.gan_loss_fn(pred_fake_d, target_is_real=False)
+                
+                loss_d = (loss_d_real + loss_d_fake) * 0.5
                     
-                    # Real Input to D: [cloudy, mask, target] -> target is real
-                    real_input_d = torch.cat([cloudy, mask, target], dim=1)
-                    pred_real_d = self.discriminator(real_input_d)
-                    loss_d_real = self.gan_loss_fn(pred_real_d, target_is_real=True)
-                    
-                    # Fake Input to D: [cloudy, mask, pred] -> pred is fake
-                    fake_input_d = torch.cat([cloudy, mask, pred.detach()], dim=1)
-                    pred_fake_d = self.discriminator(fake_input_d)
-                    loss_d_fake = self.gan_loss_fn(pred_fake_d, target_is_real=False)
-                    
-                    loss_d = (loss_d_real + loss_d_fake) * 0.5
-                    
-                self.scaler.scale(loss_d).backward()
-                self.scaler.step(self.opt_d)
+                loss_d.backward()
+                torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), max_norm=1.0)
+                self.opt_d.step()
                 
                 # ---------------------
                 # Train Generator
                 # ---------------------
                 self.optimizer.zero_grad()
                 
-                with autocast(enabled=self.device.type == 'cuda'):
-                    # D evaluates the generated image
-                    fake_input_g = torch.cat([cloudy, mask, pred], dim=1)
-                    pred_fake_g = self.discriminator(fake_input_g)
-                    
-                    loss_g, metrics = self.loss_fn(pred, target, mask, pred_fake_logits=pred_fake_g)
+                # D evaluates the generated image
+                fake_input_g = torch.cat([cloudy, mask, pred], dim=1)
+                pred_fake_g = self.discriminator(fake_input_g)
                 
-                self.scaler.scale(loss_g).backward()
-                self.scaler.unscale_(self.optimizer)
+                loss_g, metrics = self.loss_fn(pred, target, mask, pred_fake_logits=pred_fake_g)
+                
+                loss_g.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
+                self.optimizer.step()
                 
                 epoch_loss += loss_g.item()
                 

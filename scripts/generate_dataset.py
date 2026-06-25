@@ -33,13 +33,13 @@ def main():
     os.makedirs(processed_dir, exist_ok=True)
     
     # Download items as-is without synthetic injection
-    for i in range(min(5, len(s2_items))):
+    for i in range(min(50, len(s2_items))):
         s2_item = s2_items[i]
         success = downloader.download_s2_patch(s2_item, bbox, raw_dir)
         if success:
             logger.info(f"Downloaded authentic optical data: {s2_item.id}")
             
-    for i in range(min(5, len(s1_items))):
+    for i in range(min(50, len(s1_items))):
         s1_item = s1_items[i]
         downloader.download_s1_patch(s1_item, raw_dir)
         
