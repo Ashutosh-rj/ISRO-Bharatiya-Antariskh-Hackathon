@@ -86,22 +86,46 @@ class CrossModalTransformer(nn.Module):
         B, C, H, W = opt_feat.size()
         N = H * W
         
-        # Flatten spatial dims
-        opt_flat = opt_feat.view(B, C, N).permute(0, 2, 1) # B, N, C
-        sar_flat = sar_feat.view(B, C, N).permute(0, 2, 1)
-        
+        # Adaptive spatial pooling if token length N exceeds 1024 to prevent O(N^2) CPU OOM crashes
+        if N > 1024:
+            pool_h, pool_w = 32, 32
+            opt_pooled = F.adaptive_avg_pool2d(opt_feat, (pool_h, pool_w))
+            sar_pooled = F.adaptive_avg_pool2d(sar_feat, (pool_h, pool_w))
+            N_pool = pool_h * pool_w
+            opt_flat = opt_pooled.view(B, C, N_pool).permute(0, 2, 1)
+            sar_flat = sar_pooled.view(B, C, N_pool).permute(0, 2, 1)
+        else:
+            opt_flat = opt_feat.view(B, C, N).permute(0, 2, 1)
+            sar_flat = sar_feat.view(B, C, N).permute(0, 2, 1)
+            
         # Cross-attention: Opt queries SAR (capture attention weights for explainability)
         attn_sar, attn_weights = self.mha_sar(query=opt_flat, key=sar_flat, value=sar_flat, need_weights=True)
         out = self.norm1(opt_flat + attn_sar)
         
         # Extract spatial attention map (mean across attention targets per query pixel)
-        attn_map_low = attn_weights.mean(dim=-1).view(B, 1, H, W)
+        if N > 1024:
+            attn_map_low = attn_weights.mean(dim=-1).view(B, 1, pool_h, pool_w)
+            attn_map_low = F.interpolate(attn_map_low, size=(H, W), mode='bilinear', align_corners=False)
+            # Upsample output back to original spatial tokens
+            out_spatial = out.permute(0, 2, 1).view(B, C, pool_h, pool_w)
+            out_spatial = F.interpolate(out_spatial, size=(H, W), mode='bilinear', align_corners=False)
+            out = out_spatial.view(B, C, N).permute(0, 2, 1)
+        else:
+            attn_map_low = attn_weights.mean(dim=-1).view(B, 1, H, W)
         
         # Cross-attention: Opt queries S2 (if available)
         if s2_feat is not None:
-            s2_flat = s2_feat.view(B, C, N).permute(0, 2, 1)
-            attn_s2, _ = self.mha_s2(query=out, key=s2_flat, value=s2_flat)
-            out = self.norm2(out + attn_s2)
+            if N > 1024:
+                s2_pooled = F.adaptive_avg_pool2d(s2_feat, (pool_h, pool_w))
+                s2_flat = s2_pooled.view(B, C, N_pool).permute(0, 2, 1)
+                out_pool = F.adaptive_avg_pool2d(out.permute(0, 2, 1).view(B, C, H, W), (pool_h, pool_w)).view(B, C, N_pool).permute(0, 2, 1)
+                attn_s2, _ = self.mha_s2(query=out_pool, key=s2_flat, value=s2_flat)
+                out_s2 = self.norm2(out_pool + attn_s2)
+                out = F.interpolate(out_s2.permute(0, 2, 1).view(B, C, pool_h, pool_w), size=(H, W), mode='bilinear', align_corners=False).view(B, C, N).permute(0, 2, 1)
+            else:
+                s2_flat = s2_feat.view(B, C, N).permute(0, 2, 1)
+                attn_s2, _ = self.mha_s2(query=out, key=s2_flat, value=s2_flat)
+                out = self.norm2(out + attn_s2)
         
         # FFN
         ffn_out = self.ffn(out)

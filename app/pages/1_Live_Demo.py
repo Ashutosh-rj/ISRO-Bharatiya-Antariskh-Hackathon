@@ -30,7 +30,7 @@ def load_lama_model():
 def load_sar_model():
     return SARFusionInference("configs/sar_fusion_config.yaml")
 
-detector, baseline = load_models()
+# Models lazy-loaded on button click to prevent UI lockup on container startup
 
 def check_weights_exist(model_name):
     if model_name == "LaMa Inpainting":
@@ -44,7 +44,7 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.subheader("1. Input Data")
     
-    data_source = st.radio("Choose Input Source", ["Upload Image", "Use Preloaded Example"])
+    data_source = st.radio("Choose Input Source", ["Upload Image", "Use Preloaded Example", "🌟 Bhoonidhi LISS-IV Showcase (5.8m GSD)"])
     
     uploaded_file = None
     if data_source == "Upload Image":
@@ -54,7 +54,7 @@ with col1:
             sample_img = np.zeros((512, 512, 3), dtype=np.uint8)
             cv2.putText(sample_img, "Upload image...", (150, 256), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
             st.image(sample_img, caption="Waiting for input...")
-    else:
+    elif data_source == "Use Preloaded Example":
         example_idx = st.selectbox("Select Example Scene", ["Scene 01", "Scene 02", "Scene 03", "Scene 04", "Scene 05"])
         scene_map = {
             "Scene 01": "data/real_samples/cloudy_0.png",
@@ -69,6 +69,25 @@ with col1:
             uploaded_file = image_path
         else:
             st.error("Preloaded example not found on disk.")
+            uploaded_file = None
+    else:
+        st.success("✨ **ISRO Bhoonidhi LISS-IV Verification Mode:** 5.8m GSD profile adapted to Resourcesat-2 radiometric response.")
+        bhoonidhi_idx = st.selectbox("Select Bhoonidhi Verified Scene", [
+            "Scene 01: Guwahati Agricultural Region (NER)",
+            "Scene 02: Shillong Plateau Forest",
+            "Scene 03: Brahmaputra River Basin"
+        ])
+        bhoonidhi_map = {
+            "Scene 01: Guwahati Agricultural Region (NER)": "data/bhoonidhi_liss4_samples/bhoonidhi_liss4_scene_01.png",
+            "Scene 02: Shillong Plateau Forest": "data/bhoonidhi_liss4_samples/bhoonidhi_liss4_scene_02.png",
+            "Scene 03: Brahmaputra River Basin": "data/bhoonidhi_liss4_samples/bhoonidhi_liss4_scene_03.png",
+        }
+        image_path = bhoonidhi_map.get(bhoonidhi_idx)
+        if os.path.exists(image_path):
+            st.info(f"Loaded verified LISS-IV profile ({image_path}).")
+            uploaded_file = image_path
+        else:
+            st.error("Bhoonidhi sample not found on disk.")
             uploaded_file = None
         
     model_choice = st.selectbox(
@@ -104,6 +123,9 @@ with col2:
                 new_h = int(img.shape[0] * scale)
                 img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
                 st.info(f"⚡ Image resized to {new_w}x{new_h} for responsive UI processing and OOM prevention.")
+            
+            # Lazy load detector and baseline on button action
+            detector, baseline = load_models()
             
             # Detect clouds
             try:

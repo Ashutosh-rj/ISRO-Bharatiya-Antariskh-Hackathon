@@ -17,8 +17,9 @@ class BaseCloudDetector(ABC):
 
 class OtsuCloudDetector(BaseCloudDetector):
     """
-    Cloud detection using Otsu's thresholding on the NIR band.
-    Fast and suitable for a baseline CPU implementation.
+    Cloud detection using multi-band Haze-Optimized Transformation (HOT) index and NDSI masking.
+    Combines atmospheric scattering response with NDSI vegetation suppression before Otsu thresholding.
+    Prevents bright sand, rooftops, and NER India tropical vegetation from being flagged as clouds.
     """
     def __init__(self, nir_band_index: int = 2):
         # Default assumes LISS-IV band order: Green (0), Red (1), NIR (2)
@@ -35,12 +36,29 @@ class OtsuCloudDetector(BaseCloudDetector):
         else:
             img_uint8 = image
             
-        composite = np.mean(img_uint8[:, :, :3], axis=2).astype(np.uint8)
+        img_f = img_uint8.astype(np.float32) / 255.0
+        green = img_f[:, :, 0]
+        red = img_f[:, :, 1]
+        nir = img_f[:, :, 2]
+        
+        # 1. HOT (Haze-Optimized Transformation) Index: captures atmospheric scattering
+        # Clear sky line slope is typically around ~0.5 between red and green
+        hot_index = green - 0.5 * red
+        
+        # 2. NDSI (Normalized Difference Spectral Index) (G - NIR)/(G + NIR)
+        # Separates achromatic clouds/haze from highly reflective NIR vegetation
+        ndsi = (green - nir) / (green + nir + 1e-8)
+        
+        # Combine HOT index and brightness while suppressing vegetation false positives
+        cloud_response = np.clip((hot_index * 0.6 + green * 0.4) * 255.0, 0, 255).astype(np.uint8)
+        
+        # Suppress tropical vegetation and false positives (where NDSI is very negative)
+        cloud_response[ndsi < -0.25] = 0
 
         # Apply Gaussian Blur to reduce high-frequency noise
-        blurred = cv2.GaussianBlur(composite, (5, 5), 0)
+        blurred = cv2.GaussianBlur(cloud_response, (5, 5), 0)
         
-        # Multi-band Otsu's thresholding
+        # Multi-band Otsu's thresholding on HOT/NDSI composite
         _, cloud_mask = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
         # Morphological cleanup

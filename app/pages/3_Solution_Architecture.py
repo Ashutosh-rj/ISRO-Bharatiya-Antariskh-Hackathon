@@ -19,7 +19,7 @@ To preserve fine-scale spatial details, we utilize a Conditional GAN (cGAN) appr
 st.header("2. Multi-Modal Fusion (Sentinel-1 SAR + LISS-IV)")
 st.markdown("""
 The problem statement notes that traditional masking leads to information loss. To reconstruct missing optical data, we fuse **LISS-IV optical imagery** with **Sentinel-1 SAR imagery** (C-band radar).
-- **SAR Penetration:** SAR signals penetrate cloud cover, providing a structural map of the ground (buildings, topography, water bodies) underneath the clouds.
+- **SAR Penetration:** Sentinel-1 C-band SAR radar backscatter (VV/VH) penetrates cloud cover, providing surface roughness and boundary geometry (buildings, water bodies, agricultural field edges) underneath the clouds. *(Note: Dedicated DEM elevation raster fusion is planned as an operational Phase 2 extension).*
 - **Dual-Encoder U-Net:** Our custom architecture uses a Cross-Attention Bottleneck to align SAR features with Optical features, guiding the reconstruction of masked regions with ground-truth radar data.
 """)
 

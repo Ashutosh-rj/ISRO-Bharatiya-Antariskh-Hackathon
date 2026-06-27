@@ -18,31 +18,26 @@ class SAMLoss(nn.Module):
         pred, target: (B, C, H, W)
         mask: (B, 1, H, W) binary mask where 1 means clouded pixel (requires reconstruction)
         """
-        # Only compute SAM on the reconstructed pixels
-        pred_masked = pred * mask
-        target_masked = target * mask
+        # Select strictly the masked pixel vectors to prevent unmasked zero regions from inflating cos_theta
+        mask_bool = mask.squeeze(1) > 0 # (B, H, W)
+        if not mask_bool.any():
+            return torch.tensor(0.0, device=pred.device, requires_grad=True)
+            
+        pred_pixels = pred.permute(0, 2, 3, 1)[mask_bool] # (N_valid, C)
+        target_pixels = target.permute(0, 2, 3, 1)[mask_bool] # (N_valid, C)
         
-        # Flatten spatial dimensions
-        B, C, H, W = pred_masked.shape
-        pred_flat = pred_masked.view(B, C, -1)
-        target_flat = target_masked.view(B, C, -1)
-        
-        # Compute dot product
-        dot = torch.sum(pred_flat * target_flat, dim=1)
+        # Compute dot product across channels (dim=1)
+        dot = torch.sum(pred_pixels * target_pixels, dim=1)
         
         # Compute magnitudes safely (sqrt(sum(x^2) + eps^2))
-        pred_norm = torch.sqrt(torch.sum(pred_flat**2, dim=1) + self.eps**2)
-        target_norm = torch.sqrt(torch.sum(target_flat**2, dim=1) + self.eps**2)
+        pred_norm = torch.sqrt(torch.sum(pred_pixels**2, dim=1) + self.eps**2)
+        target_norm = torch.sqrt(torch.sum(target_pixels**2, dim=1) + self.eps**2)
         
         # Calculate angle with strict float32 numerical bounds (-0.9999, 0.9999) to prevent acos backward NaN
         cos_theta = (dot / (pred_norm * target_norm)).clamp(-0.9999, 0.9999)
         sam = torch.acos(cos_theta)
         
-        # Mean over non-zero elements
-        num_valid = mask.view(B, -1).sum(dim=1).clamp(min=1.0)
-        sam_loss = (sam.sum(dim=1) / num_valid).mean()
-        
-        return sam_loss
+        return sam.mean()
 
 class PerceptualLoss(nn.Module):
     """

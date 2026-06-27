@@ -88,8 +88,9 @@ class ResidualFFCBlock(nn.Module):
 
 class LaMaGenerator(nn.Module):
     """
-    Large Mask Inpainting Generator using Fast Fourier Convolutions.
-    Adapted for 4-channel input (RGB + Mask) and CPU-friendly execution.
+    FFC-Bottleneck ResNet (Lightweight LaMa-Style Inpainting Network).
+    Downsamples 4x and applies Fast Fourier Convolution (FFC) residual blocks at the 64-channel bottleneck.
+    Designed specifically to bring frequency-domain global receptive field priors to CPU hackathon execution budgets.
     """
     def __init__(self, in_channels=4, out_channels=3, ngf=64, n_blocks=6):
         super(LaMaGenerator, self).__init__()

@@ -58,10 +58,17 @@ def compute_sam(pred: np.ndarray, target: np.ndarray) -> float:
     
     return np.mean(sam_angles)
 
-def compute_ergas(pred: np.ndarray, target: np.ndarray, ratio: int = 1) -> float:
+def compute_ergas(pred: np.ndarray, target: np.ndarray, ratio: float = 1.0) -> float:
     """
     Erreur Relative Globale Adimensionnelle de Synthèse (ERGAS).
-    Widely used in remote sensing pan-sharpening and fusion.
+    Widely used in remote sensing pan-sharpening and cross-sensor image synthesis.
+    
+    Args:
+        pred: Predicted synthesized image array [H, W, C].
+        target: Reference ground truth image array [H, W, C].
+        ratio: Spatial resolution ratio between high-res and low-res sensors (h/l).
+               Defaults to 1.0 for same-resolution inpainting benchmarks (e.g., SEN12MS-CR 10m to 10m).
+               For cross-sensor super-resolution (e.g., 10m Sentinel-2 to 5.8m LISS-IV), pass ratio=0.58 (5.8/10.0).
     """
     pred = pred.astype(np.float32)
     target = target.astype(np.float32)
@@ -73,7 +80,7 @@ def compute_ergas(pred: np.ndarray, target: np.ndarray, ratio: int = 1) -> float
     mean_target[mean_target == 0] = 1e-10
     
     sum_ratio = np.sum((rmse_bands / mean_target)**2)
-    ergas = 100 * ratio * np.sqrt(sum_ratio / pred.shape[2])
+    ergas = 100.0 * ratio * np.sqrt(sum_ratio / pred.shape[2])
     return float(ergas)
 
 def compute_scc(pred: np.ndarray, target: np.ndarray) -> float:
@@ -128,7 +135,7 @@ def compute_rmse(pred: np.ndarray, target: np.ndarray) -> Dict[str, float]:
     return {'RMSE_Total': float(rmse_total), **band_rmse}
 
 class MetricsCalculator:
-    def evaluate(self, pred: np.ndarray, target: np.ndarray) -> Dict[str, Any]:
+    def evaluate(self, pred: np.ndarray, target: np.ndarray, ergas_ratio: float = 1.0) -> Dict[str, Any]:
         """Runs all metrics on the prediction and target pairs."""
         logger.info("Computing evaluation metrics...")
         
@@ -143,7 +150,7 @@ class MetricsCalculator:
             
         metrics['SAM'] = compute_sam(pred, target)
         metrics['MAE'] = float(np.mean(np.abs(pred.astype(np.float32) - target.astype(np.float32))))
-        metrics['ERGAS'] = compute_ergas(pred, target)
+        metrics['ERGAS'] = compute_ergas(pred, target, ratio=ergas_ratio)
         
         try:
             metrics['SCC'] = compute_scc(pred, target)

@@ -43,7 +43,7 @@ class LaMaTrainer:
         self.history = []
 
     def train(self, train_paths: list, val_paths: list):
-        train_dataset = LISSIV_Dataset(train_paths, augment=False)
+        train_dataset = LISSIV_Dataset(train_paths, augment=True)
         val_dataset = LISSIV_Dataset(val_paths, augment=False)
         
         train_size = len(train_dataset)

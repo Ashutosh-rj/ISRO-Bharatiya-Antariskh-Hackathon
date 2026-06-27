@@ -64,8 +64,6 @@ class LaMaInference:
             import cv2
             image_work = cv2.resize(image, (512, 512), interpolation=cv2.INTER_AREA)
             mask_work = cv2.resize(mask, (512, 512), interpolation=cv2.INTER_NEAREST)
-            # The Carve/LaMa-ONNX model actually expects the mask to be inverted? Let's try passing 1 - mask
-            mask_work = 1 - mask_work
         else:
             image_work = image
             mask_work = mask
@@ -101,9 +99,8 @@ class LaMaInference:
             ort_inputs = {'image': img_t, 'mask': mask_t}
             ort_outs = self.ort_session.run(None, ort_inputs)
             pred_t = ort_outs[0]
-            # The public Carve/LaMa-ONNX model outputs values in the [0, 255] range.
-            # Scale back to [0, 1] so the post-processing logic (which multiplies by 255) works correctly.
-            pred_t = pred_t / 255.0
+            if pred_t.max() > 1.5:
+                pred_t = pred_t / 255.0
         else:
             with torch.inference_mode():
                 img_ts = torch.from_numpy(img_t)

@@ -46,15 +46,17 @@ data/raw/
 data/processed/
 data/cloud_masks/
 !data/sample/
+!data/bhoonidhi_liss4_samples/
 datasets/
 *.pth
 *.onnx
 *.pt
 *.ckpt
-!models/*/weights/.gitkeep
 
 # Results
-results/
+results/*
+!results/*.csv
+!results/*.png
 logs/
 
 # Streamlit / Frontend Modules

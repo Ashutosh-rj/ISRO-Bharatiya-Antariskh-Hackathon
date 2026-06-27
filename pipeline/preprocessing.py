@@ -22,19 +22,22 @@ class PatchExtractor:
         h, w = image.shape[:2]
         patches = []
         
-        for y in range(0, h - self.patch_size + 1, self.stride):
-            for x in range(0, w - self.patch_size + 1, self.stride):
+        y_coords = list(range(0, max(1, h - self.patch_size + 1), self.stride))
+        if h >= self.patch_size and y_coords[-1] != h - self.patch_size:
+            y_coords.append(h - self.patch_size)
+            
+        x_coords = list(range(0, max(1, w - self.patch_size + 1), self.stride))
+        if w >= self.patch_size and x_coords[-1] != w - self.patch_size:
+            x_coords.append(w - self.patch_size)
+            
+        for y in y_coords:
+            for x in x_coords:
                 img_patch = image[y:y+self.patch_size, x:x+self.patch_size]
                 patch_dict = {'image': img_patch, 'coord': (y, x)}
                 if mask is not None:
                     patch_dict['mask'] = mask[y:y+self.patch_size, x:x+self.patch_size]
                 patches.append(patch_dict)
                 
-        # Handle edges
-        if h % self.patch_size != 0 or w % self.patch_size != 0:
-            # Add logic for right and bottom edges if strict coverage is needed
-            pass
-            
         return patches
 
 class DataAugmentor:
