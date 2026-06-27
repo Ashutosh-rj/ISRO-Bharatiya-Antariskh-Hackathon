@@ -40,6 +40,7 @@ class LaMaTrainer:
         
         self.weights_dir = "models/lama/weights"
         os.makedirs(self.weights_dir, exist_ok=True)
+        self.history = []
 
     def train(self, train_paths: list, val_paths: list):
         train_dataset = LISSIV_Dataset(train_paths, augment=False)
@@ -94,11 +95,25 @@ class LaMaTrainer:
             
             logger.info(f"Epoch [{epoch+1}/{epochs}] Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | LR: {self.scheduler.get_last_lr()[0]:.6f}")
             
+            self.history.append({
+                "epoch": epoch + 1,
+                "train_loss": avg_train_loss,
+                "val_loss": avg_val_loss,
+                "lr": self.scheduler.get_last_lr()[0]
+            })
+            
             if (epoch + 1) % 10 == 0:
                 self.save_checkpoint(f"lama_epoch_{epoch+1}.pth")
                 
         # Final save
         self.save_checkpoint("lama_big.pth")
+        
+        import pandas as pd
+        os.makedirs("results", exist_ok=True)
+        hist_csv = os.path.join("results", "lama_training_history.csv")
+        pd.DataFrame(self.history).to_csv(hist_csv, index=False)
+        logger.info(f"Saved LaMa training history CSV to {hist_csv}")
+        
         try:
             self.export_onnx("lama_big.onnx")
         except Exception as e:

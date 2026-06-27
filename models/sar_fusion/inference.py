@@ -55,7 +55,12 @@ class SARFusionInference:
         is_uint8 = optical.dtype == np.uint8
         
         opt_f = optical.astype(np.float32) / 255.0 if is_uint8 else optical.astype(np.float32)
+        if opt_f.ndim == 3 and opt_f.shape[2] > 3:
+            opt_f = opt_f[:, :, :3]
+            
         mask_f = mask.astype(np.float32)
+        if mask_f.ndim == 3 and mask_f.shape[2] == 1:
+            mask_f = mask_f[:, :, 0]
         if mask_f.max() > 1.0: mask_f /= 255.0
             
         # Handle missing SAR by passing zeros
@@ -88,7 +93,7 @@ class SARFusionInference:
             if mc_dropout:
                 self.model.train() # Enable Dropout
                 preds = []
-                with torch.no_grad():
+                with torch.inference_mode():
                     for _ in range(num_mc_passes):
                         p = self.model(
                             torch.from_numpy(opt_t), 
@@ -104,7 +109,7 @@ class SARFusionInference:
                 self.model.eval() # Restore
                 attention_t = None
             else:
-                with torch.no_grad():
+                with torch.inference_mode():
                     out = self.model(
                         torch.from_numpy(opt_t), 
                         torch.from_numpy(mask_t), 

@@ -44,10 +44,7 @@ class DataAugmentor:
             A.RandomCrop(width=crop_size, height=crop_size, p=1.0),
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
-            A.RandomRotate90(p=0.5),
-            A.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.0, p=0.3),
-            A.GaussNoise(var_limit=(10.0, 50.0), p=0.2), # Atmospheric noise simulation
-            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.3) # Cloud opacity variance
+            A.RandomRotate90(p=0.5)
         ], additional_targets={'mask': 'mask', 'cloud_free': 'image', 'sar': 'image'})
 
     def augment(self, cloudy: np.ndarray, mask: np.ndarray, cloud_free: np.ndarray = None, sar: np.ndarray = None) -> Dict[str, np.ndarray]:
@@ -77,9 +74,14 @@ class LISSIV_Dataset(Dataset):
         path = self.npz_paths[idx]
         data = np.load(path)
         
-        cloudy = data['cloudy']
+        # Take first 3 bands (Green, Red, NIR) for optical LISS-IV sensor
+        cloudy = data['cloudy'][:, :, :3]
         mask = data['mask']
-        cloud_free = data.get('cloud_free', np.zeros_like(cloudy)) # For training target
+        if mask.ndim == 3 and mask.shape[2] == 1:
+            mask = mask[:, :, 0]
+            
+        cloud_free_raw = data.get('cloud_free', np.zeros_like(data['cloudy']))
+        cloud_free = cloud_free_raw[:, :, :3]
         sar = data.get('sar', np.zeros((cloudy.shape[0], cloudy.shape[1], 2), dtype=cloudy.dtype))
         
         if self.augmentor:
@@ -89,9 +91,13 @@ class LISSIV_Dataset(Dataset):
             cloud_free = augmented['cloud_free']
             sar = augmented['sar']
             
-        # Convert to float32 tensors, channel first [C, H, W]
+        if mask.ndim == 2:
+            mask = mask[:, :, np.newaxis]
+        mask_f = (mask > 0).astype(np.float32)
+            
+        # Convert to float32 tensors, channel first [C, H, W] normalized to [0, 1]
         cloudy_t = torch.from_numpy(cloudy).float().permute(2, 0, 1) / 255.0
-        mask_t = torch.from_numpy(mask).float().unsqueeze(0) # [1, H, W]
+        mask_t = torch.from_numpy(mask_f).permute(2, 0, 1) # [1, H, W]
         cloud_free_t = torch.from_numpy(cloud_free).float().permute(2, 0, 1) / 255.0
         sar_t = torch.from_numpy(sar).float().permute(2, 0, 1) / 255.0
         

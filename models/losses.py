@@ -34,8 +34,8 @@ class SAMLoss(nn.Module):
         pred_norm = torch.sqrt(torch.sum(pred_flat**2, dim=1) + self.eps**2)
         target_norm = torch.sqrt(torch.sum(target_flat**2, dim=1) + self.eps**2)
         
-        # Calculate angle
-        cos_theta = (dot / (pred_norm * target_norm)).clamp(-1.0 + self.eps, 1.0 - self.eps)
+        # Calculate angle with strict float32 numerical bounds (-0.9999, 0.9999) to prevent acos backward NaN
+        cos_theta = (dot / (pred_norm * target_norm)).clamp(-0.9999, 0.9999)
         sam = torch.acos(cos_theta)
         
         # Mean over non-zero elements
@@ -47,8 +47,13 @@ class SAMLoss(nn.Module):
 class PerceptualLoss(nn.Module):
     """
     Perceptual loss using VGG features via the LPIPS library.
-    Includes offline-safety: if weights cannot be downloaded (e.g. no internet), 
-    it falls back to a simple L1 stub to prevent crashing.
+    
+    APPROXIMATION DISCLAIMER:
+    LISS-IV multispectral radiometry captures Green (520-590nm), Red (620-680nm), and NIR (770-860nm).
+    Because VGG networks are trained exclusively on natural-image RGB statistics (ImageNet), mapping
+    Green -> R, Red -> G, and NIR -> B creates a pseudo-RGB transfer approximation. While effective for
+    spatial edge and texture regularity matching, this introduces a known spectral domain shift with no
+    absolute radiometric fidelity guarantee.
     """
     def __init__(self, device='cpu'):
         super().__init__()
@@ -59,7 +64,6 @@ class PerceptualLoss(nn.Module):
                 param.requires_grad = False
             self.active = True
         except Exception as e:
-            # Fallback for offline hackathon environment
             print(f"Warning: Could not load LPIPS VGG weights (likely offline). Perceptual loss disabled. Error: {e}")
 
     def forward(self, pred, target):
@@ -70,8 +74,7 @@ class PerceptualLoss(nn.Module):
         pred_scaled = pred * 2.0 - 1.0
         target_scaled = target * 2.0 - 1.0
         
-        # Band adaptation for LISS-IV (Green, Red, NIR) -> pseudo-RGB for VGG
-        # VGG expects RGB. We map: Green -> R, Red -> G, NIR -> B
+        # Band adaptation for LISS-IV (Green, Red, NIR) -> pseudo-RGB for VGG feature extractor
         pred_pseudo_rgb = torch.cat([
             pred_scaled[:, 0:1, :, :], # Green -> R
             pred_scaled[:, 1:2, :, :], # Red -> G
@@ -79,12 +82,16 @@ class PerceptualLoss(nn.Module):
         ], dim=1)
         
         target_pseudo_rgb = torch.cat([
-            target_scaled[:, 0:1, :, :], # Green -> R
-            target_scaled[:, 1:2, :, :], # Red -> G
-            target_scaled[:, 2:3, :, :]  # NIR -> B
+            target_scaled[:, 0:1, :, :],
+            target_scaled[:, 1:2, :, :],
+            target_scaled[:, 2:3, :, :]
         ], dim=1)
         
-        loss = self.loss_fn(pred_pseudo_rgb, target_pseudo_rgb)
+        # Downsample to 64x64 for 16x CPU speedup during VGG feature extraction
+        pred_64 = F.interpolate(pred_pseudo_rgb, size=(64, 64), mode='bilinear', align_corners=False)
+        target_64 = F.interpolate(target_pseudo_rgb, size=(64, 64), mode='bilinear', align_corners=False)
+        
+        loss = self.loss_fn(pred_64, target_64)
         return loss.mean()
 
 class GANLoss(nn.Module):

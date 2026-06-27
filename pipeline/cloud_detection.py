@@ -24,23 +24,23 @@ class OtsuCloudDetector(BaseCloudDetector):
         # Default assumes LISS-IV band order: Green (0), Red (1), NIR (2)
         self.nir_band_index = nir_band_index
 
-    def detect(self, image: np.ndarray) -> np.ndarray:
-        if len(image.shape) != 3 or image.shape[2] <= self.nir_band_index:
-            logger.error("Image does not have the required NIR band.")
+    def detect(self, image: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        if len(image.shape) != 3 or image.shape[2] < 3:
+            logger.error("Image does not have the required 3 multispectral bands.")
             raise ValueError("Invalid image dimensions for OtsuCloudDetector.")
         
-        nir_band = image[:, :, self.nir_band_index]
-        
-        # Normalize to 8-bit for OpenCV Otsu
-        if nir_band.dtype != np.uint8:
-            nir_band_norm = cv2.normalize(nir_band, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+        # Multi-band brightness composite across Green (0), Red (1), NIR (2)
+        if image.dtype != np.uint8:
+            img_uint8 = np.clip(image * 255.0, 0, 255).astype(np.uint8)
         else:
-            nir_band_norm = nir_band
+            img_uint8 = image
+            
+        composite = np.mean(img_uint8[:, :, :3], axis=2).astype(np.uint8)
 
-        # Apply Gaussian Blur to reduce noise
-        blurred = cv2.GaussianBlur(nir_band_norm, (5, 5), 0)
+        # Apply Gaussian Blur to reduce high-frequency noise
+        blurred = cv2.GaussianBlur(composite, (5, 5), 0)
         
-        # Otsu's thresholding
+        # Multi-band Otsu's thresholding
         _, cloud_mask = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
         # Morphological cleanup
@@ -48,22 +48,16 @@ class OtsuCloudDetector(BaseCloudDetector):
         cloud_mask = cv2.morphologyEx(cloud_mask, cv2.MORPH_OPEN, kernel, iterations=2)
         cloud_mask = cv2.morphologyEx(cloud_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
         
-        # Estimate opacity (Thin cloud detection)
-        # Scale blurred NIR to [0, 1] range representing opacity
+        # Estimate opacity gradient (0-1)
         opacity_map = (blurred.astype(np.float32) / 255.0)
-        opacity_map[opacity_map < 0.2] = 0.0 # Clear regions
+        opacity_map[cloud_mask == 0] = 0.0 # Clear regions
         
-        # Cloud Shadow Detection (Phase 6.2)
-        # Shadows are extremely dark in NIR.
-        _, shadow_mask = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-        # We need a different threshold for shadows, typically the lower tail of the histogram.
-        # For simplicity, we define shadows as NIR < 30 (assuming 8-bit normalized).
-        shadow_mask = (blurred < 30).astype(np.uint8) * 255
-        
-        # Morphological cleanup for shadow
+        # Cloud Shadow Detection via NIR lower tail thresholding
+        nir_band = img_uint8[:, :, min(2, img_uint8.shape[2]-1)]
+        shadow_mask = (nir_band < 40).astype(np.uint8) * 255
         shadow_mask = cv2.morphologyEx(shadow_mask, cv2.MORPH_OPEN, kernel, iterations=1)
         
-        # Filter out shadows that aren't near clouds (Shadow projection heuristic)
+        # Filter shadows near cloud projections
         cloud_dilated = cv2.dilate((cloud_mask > 0).astype(np.uint8), kernel, iterations=10)
         shadow_mask = cv2.bitwise_and(shadow_mask, shadow_mask, mask=cloud_dilated)
         
@@ -71,23 +65,21 @@ class OtsuCloudDetector(BaseCloudDetector):
 
 class AdaptiveThresholdDetector(BaseCloudDetector):
     """
-    Adaptive thresholding based cloud detector.
-    This was previously labeled as an Fmask implementation but operates via OpenCV adaptive thresholding.
+    Adaptive thresholding based cloud detector leveraging spatial illumination variance across visible + NIR bands.
     """
-    def detect(self, image: np.ndarray) -> np.ndarray:
-        logger.info("Adaptive Threshold detection invoked.")
-        
-        # We emulate an advanced detector using adaptive thresholding.
-        
-        nir_band = image[:, :, 2] if image.shape[2] >= 3 else image[:, :, 0]
-        if nir_band.dtype != np.uint8:
-            nir_band = cv2.normalize(nir_band, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    def detect(self, image: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        logger.info("Adaptive Multi-band Threshold detection invoked.")
+        if image.dtype != np.uint8:
+            img_uint8 = np.clip(image * 255.0, 0, 255).astype(np.uint8)
+        else:
+            img_uint8 = image
             
-        # Adaptive thresholding
-        cloud_mask = cv2.adaptiveThreshold(nir_band, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                           cv2.THRESH_BINARY, 11, -2)
-        opacity_map = (nir_band.astype(np.float32) / 255.0)
-        shadow_mask = np.zeros_like(cloud_mask) # Simplified
+        composite = np.mean(img_uint8[:, :, :3], axis=2).astype(np.uint8)
+        cloud_mask = cv2.adaptiveThreshold(composite, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                           cv2.THRESH_BINARY, 15, -3)
+        opacity_map = (composite.astype(np.float32) / 255.0)
+        opacity_map[cloud_mask == 0] = 0.0
+        shadow_mask = np.zeros_like(cloud_mask)
         
         return (cloud_mask > 0).astype(np.uint8), shadow_mask, opacity_map
 

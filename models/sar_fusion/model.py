@@ -90,9 +90,12 @@ class CrossModalTransformer(nn.Module):
         opt_flat = opt_feat.view(B, C, N).permute(0, 2, 1) # B, N, C
         sar_flat = sar_feat.view(B, C, N).permute(0, 2, 1)
         
-        # Cross-attention: Opt queries SAR
-        attn_sar, _ = self.mha_sar(query=opt_flat, key=sar_flat, value=sar_flat)
+        # Cross-attention: Opt queries SAR (capture attention weights for explainability)
+        attn_sar, attn_weights = self.mha_sar(query=opt_flat, key=sar_flat, value=sar_flat, need_weights=True)
         out = self.norm1(opt_flat + attn_sar)
+        
+        # Extract spatial attention map (mean across attention targets per query pixel)
+        attn_map_low = attn_weights.mean(dim=-1).view(B, 1, H, W)
         
         # Cross-attention: Opt queries S2 (if available)
         if s2_feat is not None:
@@ -105,19 +108,18 @@ class CrossModalTransformer(nn.Module):
         out = self.norm3(out + ffn_out)
         
         # Reshape back to spatial
-        return out.permute(0, 2, 1).view(B, C, H, W)
+        return out.permute(0, 2, 1).view(B, C, H, W), attn_map_low
 
 class SARFusionUNet(nn.Module):
     """
-    Dual-Encoder U-Net architecture.
+    Dual-Encoder U-Net architecture with SAR Skip Connections & Explainability.
     Encoder A: Optical + Mask (4ch)
     Encoder B: SAR VV+VH (2ch)
     """
     def __init__(self, optical_channels=4, sar_channels=2, s2_channels=4, out_channels=3, base_filters=64, attention_heads=4, dropout=0.2):
         super().__init__()
         
-        # Optical Encoder (LISS-IV)
-        self.opt_enc1 = ConvBlock(optical_channels, base_filters, dropout=dropout)
+        # Optical Encoder (LISS-IV + Mask)
         self.opt_enc1 = ConvBlock(optical_channels, base_filters, dropout=dropout)
         self.opt_pool1 = nn.MaxPool2d(2)
         self.opt_enc2 = ConvBlock(base_filters, base_filters*2, dropout=dropout)
@@ -148,15 +150,15 @@ class SARFusionUNet(nn.Module):
         
         self.fusion = CrossModalTransformer(base_filters*8, attention_heads=attention_heads)
         
-        # Decoder
+        # Decoder (with dual skip connections from both Optical and SAR encoders)
         self.up3 = nn.ConvTranspose2d(base_filters*8, base_filters*4, kernel_size=2, stride=2)
-        self.dec3 = ConvBlock(base_filters*8, base_filters*4, dropout=dropout) # + skip connection
+        self.dec3 = ConvBlock(base_filters*12, base_filters*4, dropout=dropout) # 4 (up3) + 4 (opt_e3) + 4 (sar_e3)
         
         self.up2 = nn.ConvTranspose2d(base_filters*4, base_filters*2, kernel_size=2, stride=2)
-        self.dec2 = ConvBlock(base_filters*4, base_filters*2, dropout=dropout)
+        self.dec2 = ConvBlock(base_filters*6, base_filters*2, dropout=dropout)  # 2 + 2 + 2
         
         self.up1 = nn.ConvTranspose2d(base_filters*2, base_filters, kernel_size=2, stride=2)
-        self.dec1 = ConvBlock(base_filters*2, base_filters, dropout=dropout)
+        self.dec1 = ConvBlock(base_filters*3, base_filters, dropout=dropout)    # 1 + 1 + 1
         
         self.final_conv = nn.Conv2d(base_filters, out_channels, kernel_size=1)
         self.sigmoid = nn.Sigmoid()
@@ -182,21 +184,21 @@ class SARFusionUNet(nn.Module):
             s2_e3 = self.s2_enc3(self.s2_pool2(s2_e2))
             s2_b = self.s2_bottleneck(self.s2_pool3(s2_e3))
         
-        # Fusion at bottleneck
-        fused = self.fusion(opt_b, sar_b, s2_b)
-        attention_map = None # Extracting map from multihead attention is complex, returning None for now
+        # Fusion at bottleneck & attention extraction
+        fused, attn_map_low = self.fusion(opt_b, sar_b, s2_b)
+        attention_map = F.interpolate(attn_map_low, size=optical.shape[2:], mode='bilinear', align_corners=False)
         
-        # Decoding
+        # Decoding with dual skip connections (Optical + SAR)
         d3 = self.up3(fused)
-        d3 = torch.cat([d3, opt_e3], dim=1) # skip connection from optical
+        d3 = torch.cat([d3, opt_e3, sar_e3], dim=1) # Aux SAR skip connection
         d3 = self.dec3(d3)
         
         d2 = self.up2(d3)
-        d2 = torch.cat([d2, opt_e2], dim=1)
+        d2 = torch.cat([d2, opt_e2, sar_e2], dim=1)
         d2 = self.dec2(d2)
         
         d1 = self.up1(d2)
-        d1 = torch.cat([d1, opt_e1], dim=1)
+        d1 = torch.cat([d1, opt_e1, sar_e1], dim=1)
         d1 = self.dec1(d1)
         
         out = self.sigmoid(self.final_conv(d1))
@@ -204,8 +206,25 @@ class SARFusionUNet(nn.Module):
         # Blend output
         reconstructed = optical * (1 - mask) + out * mask
         
-        # In training, we might need the raw out and attention.
-        # But we also need backward compatibility.
         if self.training or not torch.jit.is_tracing():
             return reconstructed, attention_map
         return reconstructed
+
+    def predict_with_uncertainty(self, optical, mask, sar, s2=None, n_samples=10):
+        """
+        Monte Carlo Dropout uncertainty estimation.
+        Performs multiple stochastic forward passes to estimate variance across reconstructed pixels.
+        """
+        was_training = self.training
+        self.train() # Force dropout active
+        preds = []
+        with torch.no_grad():
+            for _ in range(n_samples):
+                out, _ = self.forward(optical, mask, sar, s2)
+                preds.append(out)
+        preds_t = torch.stack(preds, dim=0)
+        mean_pred = preds_t.mean(dim=0)
+        variance_map = preds_t.var(dim=0).mean(dim=1, keepdim=True)
+        if not was_training:
+            self.eval()
+        return mean_pred, variance_map

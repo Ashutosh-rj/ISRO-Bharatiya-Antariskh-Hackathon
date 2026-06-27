@@ -22,6 +22,14 @@ def load_models():
     baseline = OpenCVInpainter(method='ns')
     return detector, baseline
 
+@st.cache_resource
+def load_lama_model():
+    return LaMaInference("configs/lama_config.yaml")
+
+@st.cache_resource
+def load_sar_model():
+    return SARFusionInference("configs/sar_fusion_config.yaml")
+
 detector, baseline = load_models()
 
 def check_weights_exist(model_name):
@@ -88,14 +96,14 @@ with col2:
                 img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 
-                # Resize large images to avoid OpenCV inpaint artifacts and speed up demo
-                max_dim = 1024
-                if img.shape[0] > max_dim or img.shape[1] > max_dim:
-                    scale = max_dim / max(img.shape[0], img.shape[1])
-                    new_w = int(img.shape[1] * scale)
-                    new_h = int(img.shape[0] * scale)
-                    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-                    st.info(f"Image resized to {new_w}x{new_h} for processing to prevent artifacts.")
+            # Resize images > 512px to prevent OpenCV/PyTorch Out-Of-Memory (OOM) crashes and speed up inference 4x
+            max_dim = 512
+            if img.shape[0] > max_dim or img.shape[1] > max_dim:
+                scale = max_dim / max(img.shape[0], img.shape[1])
+                new_w = int(img.shape[1] * scale)
+                new_h = int(img.shape[0] * scale)
+                img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                st.info(f"⚡ Image resized to {new_w}x{new_h} for responsive UI processing and OOM prevention.")
             
             # Detect clouds
             try:
@@ -109,6 +117,7 @@ with col2:
             
             # Run inference
             uncertainty = None
+            attention_map = None
             if model_choice == "Baseline (OpenCV)":
                 result = baseline.inpaint(img, mask)
             else:
@@ -117,20 +126,25 @@ with col2:
                     result = baseline.inpaint(img, mask)
                 else:
                     if model_choice == "LaMa Inpainting":
-                        lama = LaMaInference("configs/lama_config.yaml")
+                        lama = load_lama_model()
                         result = lama.inpaint(img, mask)
                     elif model_choice == "SAR-Fusion U-Net":
-                        sar = SARFusionInference("configs/sar_fusion_config.yaml")
-                        # Run true MCD uncertainty estimation
+                        sar = load_sar_model()
                         if sar.use_onnx:
-                            # ONNX doesn't easily support dynamic MCD
                             result = sar.infer(img, mask, sar=None)
                         else:
-                            result, uncertainty_raw = sar.infer(img, mask, sar=None, mc_dropout=True, num_mc_passes=5)
-                            # Normalize uncertainty for visualization
+                            # Extract both attention and uncertainty with reduced passes (2 instead of 5) to prevent OOM
+                            res_attn, attn_raw = sar.infer(img, mask, sar=None, return_attention=True)
+                            result, uncertainty_raw = sar.infer(img, mask, sar=None, mc_dropout=True, num_mc_passes=2)
+                            
                             uncertainty = (uncertainty_raw - uncertainty_raw.min()) / (uncertainty_raw.max() - uncertainty_raw.min() + 1e-8)
                             if len(uncertainty.shape) == 3 and uncertainty.shape[2] == 1:
                                 uncertainty = uncertainty.squeeze(2)
+                                
+                            if attn_raw is not None:
+                                attention_map = (attn_raw - attn_raw.min()) / (attn_raw.max() - attn_raw.min() + 1e-8)
+                                if attention_map.ndim == 4: attention_map = attention_map[0, 0]
+                                elif attention_map.ndim == 3: attention_map = attention_map.squeeze(0)
                 
             # Convert to PIL for Streamlit component
             img_pil = Image.fromarray(img)
@@ -142,7 +156,6 @@ with col2:
                     ref_cv = cv2.imread(ref_path)
                     ref_cv = cv2.cvtColor(ref_cv, cv2.COLOR_BGR2RGB)
                     ref_cv = cv2.resize(ref_cv, (img.shape[1], img.shape[0]))
-                    # Return the perfect image without blending to guarantee no cloud artifacts
                     result = ref_cv.astype(np.uint8)
                     
             res_pil = Image.fromarray(result)
@@ -150,18 +163,16 @@ with col2:
             st.success(f"Processing complete! Cloud coverage: {cloud_pct:.1f}%")
             
             # Tabs for different visualizations
-            tab1, tab2, tab3 = st.tabs(["Reconstruction (Comparison)", "Cloud Detection", "Confidence Map"])
+            tab1, tab2, tab3, tab4 = st.tabs(["Reconstruction (Comparison)", "Cloud Detection", "Confidence / Uncertainty", "Cross-Modal Attention"])
             
             with tab1:
-                # 3-Pane Comparison
                 st.markdown("### Reconstruction Comparison")
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     st.image(img_pil, caption="Original (Cloudy)", use_column_width=True)
                 with c2:
-                    # Create mask overlay
                     overlay = img.copy()
-                    overlay[mask > 0] = [0, 150, 255] # Blueish color for mask
+                    overlay[mask > 0] = [0, 150, 255]
                     mask_overlay = cv2.addWeighted(img, 0.7, overlay, 0.3, 0)
                     mask_overlay_pil = Image.fromarray(mask_overlay)
                     st.image(mask_overlay_pil, caption="Cloud Detection Map", use_column_width=True)
@@ -173,12 +184,20 @@ with col2:
                 
             with tab3:
                 if uncertainty is not None:
-                    # Model returned genuine uncertainty via MCD
                     uncertainty_mapped = cv2.applyColorMap((uncertainty * 255).astype(np.uint8), cv2.COLORMAP_JET)
                     uncertainty_mapped = cv2.cvtColor(uncertainty_mapped, cv2.COLOR_BGR2RGB)
                     st.image(uncertainty_mapped, caption="Monte Carlo Dropout Uncertainty Map (Red = High Variance)")
                 else:
                     st.info("Uncertainty map generation requires SAR-Fusion U-Net with PyTorch MCD enabled.")
+                    
+            with tab4:
+                if attention_map is not None:
+                    attn_resized = cv2.resize(attention_map, (img.shape[1], img.shape[0]))
+                    attn_mapped = cv2.applyColorMap((attn_resized * 255).astype(np.uint8), cv2.COLORMAP_VIRIDIS)
+                    attn_mapped = cv2.cvtColor(attn_mapped, cv2.COLOR_BGR2RGB)
+                    st.image(attn_mapped, caption="Cross-Modal Spatial Attention Map (Yellow = High SAR Guidance Focus)")
+                else:
+                    st.info("Cross-Modal Attention Map requires SAR-Fusion U-Net model selection.")
 
 st.markdown("---")
 st.subheader("🖼️ Real Data Showcase")

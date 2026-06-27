@@ -72,7 +72,12 @@ class LaMaInference:
         
         # Preprocess
         img_f = image_work.astype(np.float32) / 255.0 if is_uint8 else image_work.astype(np.float32)
+        if img_f.ndim == 3 and img_f.shape[2] > 3:
+            img_f = img_f[:, :, :3]
+            
         mask_f = mask_work.astype(np.float32)
+        if mask_f.ndim == 3 and mask_f.shape[2] == 1:
+            mask_f = mask_f[:, :, 0]
         
         if mask_f.max() > 1.0:
             mask_f = mask_f / 255.0
@@ -100,7 +105,7 @@ class LaMaInference:
             # Scale back to [0, 1] so the post-processing logic (which multiplies by 255) works correctly.
             pred_t = pred_t / 255.0
         else:
-            with torch.no_grad():
+            with torch.inference_mode():
                 img_ts = torch.from_numpy(img_t)
                 mask_ts = torch.from_numpy(mask_t)
                 pred_ts = self.model(img_ts, mask_ts)

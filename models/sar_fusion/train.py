@@ -65,6 +65,7 @@ class SARFusionTrainer:
         self.best_val_loss = float('inf')
         self.patience = self.config['training'].get('patience', 10)
         self.epochs_without_improvement = 0
+        self.history = []
 
     def train(self, train_paths: list, val_paths: list):
         train_dataset = LISSIV_Dataset(train_paths, augment=False)
@@ -152,6 +153,13 @@ class SARFusionTrainer:
             
             logger.info(f"Epoch [{epoch+1}/{epochs}] Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | LR: {self.scheduler.get_last_lr()[0]:.6f}")
             
+            self.history.append({
+                "epoch": epoch + 1,
+                "train_loss": avg_train_loss,
+                "val_loss": avg_val_loss,
+                "lr": self.scheduler.get_last_lr()[0]
+            })
+            
             if self.use_wandb:
                 wandb.log({
                     "Train Loss": avg_train_loss,
@@ -175,6 +183,15 @@ class SARFusionTrainer:
                 self.save_checkpoint(f"sar_fusion_epoch_{epoch+1}.pth")
             
         self.save_checkpoint("sar_fusion_final.pth")
+        
+        # Save training history CSV
+        import pandas as pd
+        res_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "results"))
+        os.makedirs(res_dir, exist_ok=True)
+        hist_csv = os.path.join(res_dir, "sar_training_history.csv")
+        pd.DataFrame(self.history).to_csv(hist_csv, index=False)
+        logger.info(f"Saved training history CSV to {hist_csv}")
+        
         try:
             self.export_onnx("sar_fusion.onnx")
         except Exception as e:

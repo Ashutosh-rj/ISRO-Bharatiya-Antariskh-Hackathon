@@ -32,36 +32,29 @@ def main():
             logger.error(f"Data generation failed: {e}")
             logger.warning("If you are offline, ensure data/processed/train contains .npz files.")
 
-    train_dir = os.path.join(project_root, "data", "processed", "train")
-    if not os.path.exists(train_dir) or len(os.listdir(train_dir)) == 0:
+    train_dir = os.path.join(project_root, "datasets", "SEN12MS-CR_subset", "train")
+    val_dir = os.path.join(project_root, "datasets", "SEN12MS-CR_subset", "val")
+    if not os.path.exists(train_dir):
         logger.error(f"No training data found in {train_dir}. Exiting.")
         sys.exit(1)
 
-    train_files = get_npz_files(train_dir)
-    train_files.sort() # Ensure stable sorting
-    logger.info(f"Found {len(train_files)} training patches.")
-    
-    # Generate identical train/val split for all models
-    random.seed(42)
-    random.shuffle(train_files)
-    val_size = max(1, int(0.2 * len(train_files)))
-    train_split = train_files[:-val_size]
-    val_split = train_files[-val_size:]
+    train_files = sorted(get_npz_files(train_dir))[:30] # 30 patches
+    val_split = sorted(get_npz_files(val_dir))[:10]    # 10 val patches
+    logger.info(f"Loaded {len(train_files)} training patches and {len(val_split)} validation patches.")
+    train_split = train_files
 
-    # 2. Train LaMa
-    logger.info("Step 2: Training LaMa Generator...")
+    # 2. Train LaMa (1 Epoch fast adaptation)
+    logger.info("Step 2: Training LaMa Generator (1 Epoch)...")
     lama_config = os.path.join(project_root, "configs", "lama_config.yaml")
     lama_trainer = LaMaTrainer(lama_config)
-    # Override epochs from args
-    lama_trainer.config['training']['epochs'] = args.epochs
+    lama_trainer.config['training']['epochs'] = 1
     lama_trainer.train(train_split, val_split)
 
-    # 3. Train SAR-Fusion
-    logger.info("Step 3: Training SAR-Fusion U-Net...")
+    # 3. Train SAR-Fusion U-Net (3 Epochs flagship convergence trend run)
+    logger.info("Step 3: Training SAR-Fusion U-Net (3 Epochs)...")
     sar_config = os.path.join(project_root, "configs", "sar_fusion_config.yaml")
     sar_trainer = SARFusionTrainer(sar_config)
-    # Override epochs from args
-    sar_trainer.config['training']['epochs'] = args.epochs
+    sar_trainer.config['training']['epochs'] = 3
     sar_trainer.train(train_split, val_split)
 
     logger.info("Training complete! Weights saved to models/*/weights/")
