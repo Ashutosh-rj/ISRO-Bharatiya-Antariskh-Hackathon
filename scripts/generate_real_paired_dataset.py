@@ -107,8 +107,8 @@ def main():
         
         # Cloud mask from SCL
         scl = get_aligned_array(cloudy_item.assets['SCL'].href, bbox, width, height)
-        # SCL 8 = Medium probability cloud, 9 = High probability cloud
-        mask = ((scl == 8) | (scl == 9)).astype(np.uint8) * 255
+        # SCL 3 = Cloud shadow, 8 = Medium probability cloud, 9 = High probability cloud, 10 = Thin cirrus
+        mask = ((scl == 3) | (scl == 8) | (scl == 9) | (scl == 10)).astype(np.uint8) * 255
         
         # 3. S1 SAR (vv, vh)
         s1_vv = get_aligned_array(s1_item.assets['vv'].href, bbox, width, height)

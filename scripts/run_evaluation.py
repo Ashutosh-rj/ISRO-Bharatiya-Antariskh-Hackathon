@@ -51,7 +51,7 @@ class SARFusionWrapper:
     def __init__(self, weight_path):
         self.device = torch.device('cpu')
         self.model = SARFusionUNet(optical_channels=4, sar_channels=2, out_channels=3, base_filters=64).to(self.device)
-        self.model.load_state_dict(torch.load(weight_path, map_location=self.device), strict=False)
+        self.model.load_state_dict(torch.load(weight_path, map_location=self.device), strict=True)
         self.model.eval()
 
     def infer(self, cloudy, mask, sar):
@@ -98,17 +98,21 @@ def main():
     val_dir = os.path.join(project_root, "datasets", "SEN12MS-CR_subset", "val")
     train_dir = os.path.join(project_root, "datasets", "SEN12MS-CR_subset", "train")
     
-    files = []
-    if os.path.exists(val_dir):
-        files += get_npz_files(val_dir)
-    if os.path.exists(train_dir):
-        files += get_npz_files(train_dir)
-        
-    if not files:
+    val_files = get_npz_files(val_dir) if os.path.exists(val_dir) else []
+    train_files = get_npz_files(train_dir) if os.path.exists(train_dir) else []
+    
+    # Strictly isolate held-out validation patches for evaluation to prevent data leakage
+    if val_files:
+        test_files = val_files
+    elif train_files:
+        # Fallback: take held-out 20% from the tail of train files if separate val directory is missing
+        split_idx = max(1, int(len(train_files) * 0.8))
+        test_files = train_files[split_idx:]
+    else:
         print("No .npz data found!")
         return
 
-    test_files = files[:6] # evaluate on 6 samples across buckets
+    print(f"Evaluating on {len(test_files)} held-out sample patches...")
     dataset_pairs = load_data(test_files)
 
     print("Loading models...")
@@ -128,7 +132,7 @@ def main():
     sar_fusion = SARFusionWrapper(sar_weight)
 
     models_dict = {
-        'Baseline (Cloudy)': baseline,
+        'Baseline (Cloudy No-op)': baseline,
         'OpenCV (Telea)': opencv_base,
         'LaMa (Optical-only)': lama,
         'SAR-Fusion': sar_fusion

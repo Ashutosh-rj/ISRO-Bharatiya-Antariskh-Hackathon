@@ -60,7 +60,8 @@ class SARFusionTrainer:
         if self.use_wandb:
             wandb.init(project="LISS4-Cloud-Removal", config=self.config)
             
-        torch.autograd.set_detect_anomaly(True)
+        if self.config.get('debug', False):
+            torch.autograd.set_detect_anomaly(True)
             
         self.best_val_loss = float('inf')
         self.patience = self.config['training'].get('patience', 10)

@@ -11,6 +11,7 @@ model:
     dropout_rate: 0.2
 
 training:
+  use_wandb: false
   batch_size: 4
   epochs: 1
   learning_rate: 0.00001

@@ -122,7 +122,8 @@ with col2:
                 new_w = int(img.shape[1] * scale)
                 new_h = int(img.shape[0] * scale)
                 img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-                st.info(f"⚡ Image resized to {new_w}x{new_h} for responsive UI processing and OOM prevention.")
+                approx_gsd = 5.8 / scale
+                st.warning(f"⚡ Image resized to {new_w}x{new_h} for fast UI processing. Note: The nominal 5.8m LISS-IV Ground Sampling Distance (GSD) is approximated to ~{approx_gsd:.1f}m post-resize.")
             
             # Lazy load detector and baseline on button action
             detector, baseline = load_models()
@@ -170,16 +171,6 @@ with col2:
                 
             # Convert to PIL for Streamlit component
             img_pil = Image.fromarray(img)
-            
-            # Restore the required hackathon demo mock for Scene 01
-            if data_source == "Use Preloaded Example" and example_idx == "Scene 01":
-                ref_path = "data/real_samples/clear_reference.png"
-                if os.path.exists(ref_path):
-                    ref_cv = cv2.imread(ref_path)
-                    ref_cv = cv2.cvtColor(ref_cv, cv2.COLOR_BGR2RGB)
-                    ref_cv = cv2.resize(ref_cv, (img.shape[1], img.shape[0]))
-                    result = ref_cv.astype(np.uint8)
-                    
             res_pil = Image.fromarray(result)
             
             st.success(f"Processing complete! Cloud coverage: {cloud_pct:.1f}%")

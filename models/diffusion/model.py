@@ -4,7 +4,8 @@ import torch.nn as nn
 class ConditionalDDPM(nn.Module):
     """
     Conditional Denoising Diffusion Probabilistic Model (DDPM)
-    Used for Phase 3.2: Diffusion-Based Refinement of GAN outputs.
+    Experimental architectural placeholder stub for Phase 3.2 (Diffusion-Based Refinement).
+    Note: This simplified UNet is currently un-instantiated in live benchmark evaluations and UI demos.
     """
     def __init__(self, in_channels=3, cond_channels=4, out_channels=3, timesteps=1000):
         super(ConditionalDDPM, self).__init__()

@@ -22,13 +22,23 @@ def compute_ssim(pred: np.ndarray, target: np.ndarray) -> float:
     ssim_metric = StructuralSimilarityIndexMeasure(data_range=255.0)
     return ssim_metric(pred_t, target_t).item()
 
+_lpips_model_cache = {}
+
 def compute_lpips(pred: np.ndarray, target: np.ndarray, device='cpu') -> float:
-    """Compute LPIPS perceptual loss."""
+    """
+    Compute LPIPS perceptual loss.
+    Note on Band Order: Assumes standard project input order [Green (0), Red (1), NIR (2)],
+    which maps directly to VGG pseudo-RGB channels [R, G, B] for perceptual texture scoring.
+    """
     # LPIPS expects input in range [-1, 1] and [B, C, H, W]
     pred_t = torch.from_numpy(pred).permute(2, 0, 1).unsqueeze(0).float() / 127.5 - 1.0
     target_t = torch.from_numpy(target).permute(2, 0, 1).unsqueeze(0).float() / 127.5 - 1.0
     
-    loss_fn = lpips.LPIPS(net='vgg', verbose=False).to(device)
+    global _lpips_model_cache
+    if device not in _lpips_model_cache:
+        _lpips_model_cache[device] = lpips.LPIPS(net='vgg', verbose=False).to(device)
+    loss_fn = _lpips_model_cache[device]
+    
     with torch.no_grad():
         score = loss_fn(pred_t, target_t).item()
     return score
